@@ -1,0 +1,2 @@
+/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/output/tama_out/library1.transcripts_sorted_collapsed.bed	no_cap	1,1,1	wildtype
+/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/output/tama_out/library2.transcripts_sorted_collapsed.bed	no_cap	1,1,1	stress
