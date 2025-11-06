@@ -1,0 +1,2 @@
+library1.transcripts_collapsed.bed	no_cap	1,1,1	wildtype
+library2.transcripts_collapsed.bed	no_cap	1,1,1	stress
