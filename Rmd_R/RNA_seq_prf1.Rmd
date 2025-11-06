@@ -1,0 +1,344 @@
+# -----------------------------------------------
+# Script for Prf1 Expression Analysis (Figure 7G, S10G, S10F)
+# Author: [Jian Yi Kok]
+# Date: [2025-07-17]
+# Description: This script processes RNA-seq data from prf1 mutants
+# -----------------------------------------------
+
+```{r}
+# -----------------------------------------------
+# Figure 7G
+# -----------------------------------------------
+
+# Load required libraries
+library(readxl)
+library(dplyr)
+library(tximport)
+library(DESeq2)
+library(reshape2)
+library(ggplot2)
+
+
+
+# Define paths
+kallisto_path <- "/path/to/kallisto_counts"  # Replace with actual path
+metadata_file <- "/path/to/metadata.xlsx"  # Replace with actual path
+output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
+
+# Define filtering thresholds
+min_reads <- 15
+
+# -----------------------------------------------
+# Data Preparation
+# -----------------------------------------------
+
+# Read metadata
+metadata <- read_excel(metadata_file)
+colnames(metadata) <- c("SampleID", "Genotype", "Replicate")
+
+# Create experimental design
+data_set <- metadata %>%
+  dplyr::mutate(Genotype = factor(Genotype, levels = unique(Genotype))) %>%
+  dplyr::select(SampleID, Genotype, Replicate)
+rownames(data_set) <- data_set$SampleID
+
+# List all sample directories
+paired_kallisto_directories <- list.dirs(kallisto_path, recursive = FALSE)
+sample_names <- data_set$SampleID
+full <- file.path(paired_kallisto_directories, "paired", "abundance.h5")
+names(full) <- sample_names
+
+
+# Read transcript-level counts
+transcript_counts <- tximport(full, type = "kallisto", tx2gene = NULL, txOut = TRUE)
+transcript_counts <- transcript_counts$counts
+
+# Filter transcripts with fewer than the minimum number of reads
+transcript_counts <- transcript_counts[rowSums(transcript_counts) > min_reads, ]
+ids <- rownames(transcript_counts)
+
+# Create tx2gene table for gene-level analysis
+tx2gene <- data.frame(tx_id = ids, gene_id = ids)
+tx2gene$gene_id <- gsub("transcript:", "", tx2gene$gene_id)  # Remove "transcript:" prefix
+tx2gene$gene_id <- gsub("\\.[0-9]+$", "", tx2gene$gene_id)  # Remove version numbers
+
+# Summarize to gene-level counts
+txi <- tximport(full, type = "kallisto", tx2gene = tx2gene)
+
+
+# -----------------------------------------------
+# DESeq2 Analysis
+# -----------------------------------------------
+
+# Create DESeq2 dataset
+dds <- DESeqDataSetFromTximport(txi, data_set, ~ Genotype)
+
+# Apply VST normalization
+vst <- vst(dds)
+counts <- assay(vst)
+
+# Remove low-quality sample
+metadata <- metadata %>%
+  dplyr::filter(SampleID != "318086")
+colnames(counts) <- metadata$Genotype
+
+# Average normalized counts by genotype
+nms <- unique(colnames(counts))
+ncounts.avg <- sapply(nms, function(x) rowMeans(counts[, colnames(counts) %in% x, drop = FALSE]))
+colnames(ncounts.avg) <- c("WT", "hrp1hrp3", "prf1", "hrp1hrp3prf1")
+
+# Split into sense and antisense
+ncounts.avg.sense <- ncounts.avg[!grepl("^G", rownames(ncounts.avg)), ]
+ncounts.avg.antisense <- ncounts.avg[grepl("^G", rownames(ncounts.avg)), ]
+
+# Reshape antisense data for plotting
+ncounts.avg.antisense.long <- melt(ncounts.avg.antisense, variable.name = "Mutant", value.name = "Value")
+colnames(ncounts.avg.antisense.long) <- c("Gene", "Mutant", "Value")
+
+# -----------------------------------------------
+# Plotting
+# -----------------------------------------------
+
+# Define colors for the plot
+colors <- c("WT" = "#D3D3D3", "hrp1hrp3" = "#E69F00", "prf1" = "#228B22", "hrp1hrp3prf1" = "#F9ED32")
+
+# Create boxplot
+p1 <- ggplot(ncounts.avg.antisense.long, aes(x = Mutant, y = Value, fill = Mutant)) +
+  geom_hline(yintercept = median(as.data.frame(ncounts.avg.antisense)$WT), linetype = "dotted", color = "black") +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  ylim(1, 10) +
+  labs(
+    title = "Boxplot of Each Mutant",
+    x = "Mutant",
+    y = "Antisense Expression (Normalized Counts)"
+  ) +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    text = element_text(size = 15)
+  )
+
+# Save the plot
+output_file <- file.path(output_dir, "p1.pdf")
+ggsave(output_file, plot = p1, width = 5, height = 3.5)
+
+# -----------------------------------------------
+# Statistical Analysis
+# -----------------------------------------------
+
+# Perform ANOVA
+anova_result <- aov(Value ~ Mutant, data = ncounts.avg.antisense.long)
+
+# Perform Tukey's HSD test
+tukey_result <- TukeyHSD(anova_result)
+
+# Extract pairwise comparisons
+tukey_df <- as.data.frame(tukey_result$Mutant)
+tukey_df$Comparison <- rownames(tukey_df)
+
+# Split the "Comparison" column into group1 and group2
+tukey_df <- tukey_df %>%
+  mutate(
+    group1 = sub("-.*", "", Comparison),
+    group2 = sub(".*-", "", Comparison)
+  )
+
+# Keep only necessary columns
+tukey_df <- tukey_df[, c("group1", "group2", "p adj")]
+colnames(tukey_df) <- c("group1", "group2", "p_value")
+
+# Add significance levels
+tukey_df$Significance <- cut(
+  tukey_df$p_value,
+  breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+  labels = c("***", "**", "*", "ns")
+)
+
+# Completion message
+cat("Boxplot and statistical analysis completed. Plot saved to:", output_file, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S10G
+# -----------------------------------------------
+
+# Load required libraries
+library(reshape2)
+library(ggplot2)
+library(dplyr)
+
+# Reshape sense data for plotting
+ncounts.avg.sense.long <- melt(ncounts.avg.sense, variable.name = "Mutant", value.name = "Value")
+colnames(ncounts.avg.sense.long) <- c("Gene", "Mutant", "Value")
+
+# -----------------------------------------------
+# Plotting
+# -----------------------------------------------
+
+# Define colors for the plot
+colors <- c("WT" = "#D3D3D3", "hrp1hrp3" = "#E69F00", "prf1" = "#228B22", "hrp1hrp3prf1" = "#F9ED32")
+
+# Create boxplot
+p2 <- ggplot(ncounts.avg.sense.long, aes(x = Mutant, y = Value, fill = Mutant)) +
+  geom_hline(yintercept = median(as.data.frame(ncounts.avg.sense)$WT), linetype = "dotted", color = "black") +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  ylim(4, 15) +
+  labs(
+    title = "Boxplot of Each Mutant",
+    x = "Mutant",
+    y = "Sense Expression (Normalized Counts)"
+  ) +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    text = element_text(size = 15)
+  )
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with your desired output directory
+
+# Save the plot
+output_file <- file.path(output_dir, "p2.pdf")
+ggsave(output_file, plot = p2, width = 5, height = 3.5)
+
+# -----------------------------------------------
+# Statistical Analysis
+# -----------------------------------------------
+
+# Perform ANOVA
+anova_result <- aov(Value ~ Mutant, data = ncounts.avg.sense.long)
+
+# Perform Tukey's HSD test
+tukey_result <- TukeyHSD(anova_result)
+
+# Extract pairwise comparisons
+tukey_df <- as.data.frame(tukey_result$Mutant)
+tukey_df$Comparison <- rownames(tukey_df)
+
+# Split the "Comparison" column into group1 and group2
+tukey_df <- tukey_df %>%
+  mutate(
+    group1 = sub("-.*", "", Comparison),  # Extract the first group
+    group2 = sub(".*-", "", Comparison)   # Extract the second group
+  )
+
+# Keep only the necessary columns
+tukey_df <- tukey_df[, c("group1", "group2", "p adj")]
+colnames(tukey_df) <- c("group1", "group2", "p_value")
+
+# Add significance levels
+tukey_df$Significance <- cut(
+  tukey_df$p_value,
+  breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+  labels = c("***", "**", "*", "ns")
+)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+# Print completion message
+cat("Boxplot and statistical analysis completed. Plot saved to:", output_file, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S10F
+# -----------------------------------------------
+
+# Load required libraries
+library(tidyr)
+library(ggpointdensity)
+library(viridis)
+library(ggpubr)
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with your desired output directory
+
+# Define strains and corresponding y-axis labels
+strains <- c("hrp1hrp3", "prf1", "hrp1hrp3prf1")
+y_labels <- c("hrp1hrp3", "prf1", "hrp1hrp3prf1")
+
+# -----------------------------------------------
+# Sense Transcription Scatter Plots
+# -----------------------------------------------
+
+# Create a list to store the ggplot objects for sense transcription
+plot_list_s <- list()
+
+# Loop through the strains
+for (i in seq_along(strains)) {
+  # Subset the data for the current strain
+  subset_data <- ncounts.avg.sense[, c("WT", strains[i])]
+  colnames(subset_data) <- c("WT_sense", "Strain_sense")
+  
+  # Create the ggplot object for the current strain
+  plot <- ggplot(subset_data, aes(x = WT_sense, y = Strain_sense)) +
+    geom_pointdensity() +
+    scale_color_viridis() +
+    geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
+    labs(
+      x = "WT Sense Transcription",
+      y = y_labels[i],
+      color = "Gene density"
+    ) +
+    theme_minimal() +
+    xlim(0, 18) + ylim(0, 18) +
+    theme(text = element_text(size = 20))
+  
+  # Store the ggplot object in the list
+  plot_list_s[[i]] <- plot
+}
+
+# Save sense transcription plots
+for (i in seq_along(plot_list_s)) {
+  output_file <- file.path(output_dir, paste0("sense_scatter_", strains[i], ".tiff"))
+  ggsave(output_file, plot = plot_list_s[[i]], width = 6, height = 3.5)
+}
+
+# -----------------------------------------------
+# Antisense Transcription Scatter Plots
+# -----------------------------------------------
+
+# Create a list to store the ggplot objects for antisense transcription
+plot_list_as <- list()
+
+# Loop through the strains
+for (i in seq_along(strains)) {
+  # Subset the data for the current strain
+  subset_data <- ncounts.avg.antisense[, c("WT", strains[i])]
+  colnames(subset_data) <- c("WT_antisense", "Strain_antisense")
+  
+  # Create the ggplot object for the current strain
+  plot <- ggplot(subset_data, aes(x = WT_antisense, y = Strain_antisense)) +
+    geom_pointdensity() +
+    scale_color_viridis() +
+    geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
+    labs(
+      x = "WT Antisense Transcription",
+      y = y_labels[i],
+      color = "Gene density"
+    ) +
+    theme_minimal() +
+    theme(text = element_text(size = 20))
+  
+  # Store the ggplot object in the list
+  plot_list_as[[i]] <- plot
+}
+
+# Save antisense transcription plots
+for (i in seq_along(plot_list_as)) {
+  output_file <- file.path(output_dir, paste0("antisense_scatter_", strains[i], ".tiff"))
+  ggsave(output_file, plot = plot_list_as[[i]], width = 6, height = 3.5)
+}
+```
+

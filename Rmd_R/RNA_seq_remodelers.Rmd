@@ -1,0 +1,449 @@
+# -----------------------------------------------
+# Script for RNA-Seq Analysis Using DESeq2 (Figure 1D, S6A, S6B)
+# Author: [Jian Yi Kok]
+# Date: [2025-07-17]
+# Description: This script processes RNA-Seq data from two batches,
+#              performs differential expression analysis, and merges
+#              results for all strains.
+# -----------------------------------------------
+
+```{r}
+# Load required libraries
+library(DESeq2)
+library(readr)
+library(readxl)
+library(apeglm)
+library(ggplot2)
+
+# -----------------------------------------------
+# Batch 1: RNA-Seq Analysis
+# -----------------------------------------------
+
+# 1. Define input paths for Batch 1
+sample_info_file_1 <- "/path/to/Figure_1.xlsx"  # Replace with actual path
+kallisto_dir_1 <- "/path/to/kallisto_counts_1/"  # Replace with actual path
+
+# 2. Read sample information
+sample_info_1 <- read_excel(sample_info_file_1, sheet = "RNA_Seq_Batch_1")
+
+# 3. Load Kallisto abundance data for Batch 1
+paired_kallisto_dirs_1 <- list.dirs(kallisto_dir_1, recursive = FALSE)
+
+for (x in seq_along(paired_kallisto_dirs_1)) {
+  abundance_file <- file.path(paired_kallisto_dirs_1[x], "paired", "abundance.tsv")
+  abundance_tmp <- read_delim(abundance_file, "\t", escape_double = FALSE, trim_ws = TRUE)
+  sample_name <- basename(paired_kallisto_dirs_1[x])
+  colnames(abundance_tmp)[4] <- sample_name
+  abundance_tmp <- abundance_tmp[, c("target_id", sample_name)]
+  
+  if (x == 1) {
+    abundance <- abundance_tmp
+  } else {
+    abundance <- merge(abundance, abundance_tmp, by = "target_id")
+  }
+}
+
+# 4. Prepare DESeq2 input for Batch 1
+row.names(abundance) <- abundance$target_id
+abundance$target_id <- NULL
+sample_table_1 <- data.frame(
+  row.names = sample_info_1$`Forskalle Sample ID`[1:30],
+  genotype = sample_info_1$Genotype[1:30]
+)
+
+dds1 <- DESeqDataSetFromMatrix(
+  countData = data.frame(lapply(abundance, as.integer), check.names = FALSE, row.names = row.names(abundance)),
+  colData = sample_table_1,
+  design = ~ genotype
+)
+
+# 5. Filter low-count genes
+dds1 <- estimateSizeFactors(dds1)
+keep <- rowSums(counts(dds1)) >= 10
+dds1 <- dds1[keep, ]
+dds1$genotype <- relevel(dds1$genotype, ref = "WT")
+
+# 6. Perform DESeq2 analysis
+dds1 <- DESeq(dds1)
+
+# 7. Extract results for Batch 1 strains
+strains_batch_1 <- c("fft2", "fft3", "hrp1", "hrp3", "mit1", "rrp1", "rrp2", "irc20", "swr1")
+results_list_1 <- lapply(strains_batch_1, function(strain) {
+  res <- results(dds1, name = paste0("genotype_", strain, "_vs_WT"))
+  res_lfc <- lfcShrink(dds1, coef = paste0("genotype_", strain, "_vs_WT"), type = "apeglm")
+  df <- as.data.frame(res_lfc)
+  df$log.padj <- -log10(df$padj)
+  df$Significant <- df$padj < 0.05
+  filtered <- data.frame(
+    gene.names = row.names(df[df$padj < 0.05, ]),
+    l2fc = df[df$padj < 0.05, 2]
+  )
+  filtered <- filtered[!is.na(filtered$l2fc), ]
+  colnames(filtered)[2] <- paste0("l2fc.", strain)
+  return(filtered)
+})
+
+# 8. Combine results for Batch 1
+l2fc_all_strains_1 <- Reduce(function(x, y) merge(x, y, by = "gene.names", all = TRUE), results_list_1)
+l2fc_all_strains_1[is.na(l2fc_all_strains_1)] <- 0
+row.names(l2fc_all_strains_1) <- l2fc_all_strains_1$gene.names
+l2fc_all_strains_1$gene.names <- NULL
+```
+
+
+```{r}
+# -----------------------------------------------
+# Batch 2: RNA-Seq Analysis
+# -----------------------------------------------
+
+# 1. Define input paths for Batch 2
+sample_info_file_2 <- "/path/to/Figure_1.xlsx"  # Replace with actual path
+kallisto_dir_2 <- "/path/to/kallisto_counts_2/"  # Replace with actual path
+
+# 2. Read sample information
+sample_info_2 <- read_excel(sample_info_file_2, sheet = "RNA_Seq_Batch_2")
+
+# 3. Load Kallisto abundance data for Batch 2
+paired_kallisto_dirs_2 <- list.dirs(kallisto_dir_2, recursive = FALSE)
+
+for (x in seq_along(paired_kallisto_dirs_2)) {
+  abundance_file <- file.path(paired_kallisto_dirs_2[x], "paired", "abundance.tsv")
+  abundance_tmp <- read_delim(abundance_file, "\t", escape_double = FALSE, trim_ws = TRUE)
+  sample_name <- basename(paired_kallisto_dirs_2[x])
+  colnames(abundance_tmp)[4] <- sample_name
+  abundance_tmp <- abundance_tmp[, c("target_id", sample_name)]
+  
+  if (x == 1) {
+    abundance <- abundance_tmp
+  } else {
+    abundance <- merge(abundance, abundance_tmp, by = "target_id")
+  }
+}
+
+# 4. Prepare DESeq2 input for Batch 2
+row.names(abundance) <- abundance$target_id
+abundance$target_id <- NULL
+sample_table_2 <- data.frame(
+  row.names = sample_info_2$`Forskalle Sample ID`[1:9],
+  genotype = sample_info_2$Genotype[1:9]
+)
+
+dds2 <- DESeqDataSetFromMatrix(
+  countData = data.frame(lapply(abundance, as.integer), check.names = FALSE, row.names = row.names(abundance)),
+  colData = sample_table_2,
+  design = ~ genotype
+)
+
+# 5. Filter low-count genes
+dds2 <- estimateSizeFactors(dds2)
+keep <- rowSums(counts(dds2)) >= 10
+dds2 <- dds2[keep, ]
+dds2$genotype <- relevel(dds2$genotype, ref = "WT")
+
+# 6. Perform DESeq2 analysis
+dds2 <- DESeq(dds2)
+
+# 7. Extract results for Batch 2 strains
+strains_batch_2 <- c("fft1", "snf22")
+results_list_2 <- lapply(strains_batch_2, function(strain) {
+  res <- results(dds2, name = paste0("genotype_", strain, "_vs_WT"))
+  res_lfc <- lfcShrink(dds2, coef = paste0("genotype_", strain, "_vs_WT"), type = "apeglm")
+  df <- as.data.frame(res_lfc)
+  df$log.padj <- -log10(df$padj)
+  df$Significant <- df$padj < 0.05
+  filtered <- data.frame(
+    gene.names = row.names(df[df$padj < 0.05, ]),
+    l2fc = df[df$padj < 0.05, 2]
+  )
+  filtered <- filtered[!is.na(filtered$l2fc), ]
+  colnames(filtered)[2] <- paste0("l2fc.", strain)
+  return(filtered)
+})
+
+# 8. Combine results for Batch 2
+l2fc_all_strains_2 <- Reduce(function(x, y) merge(x, y, by = "gene.names", all = TRUE), results_list_2)
+l2fc_all_strains_2[is.na(l2fc_all_strains_2)] <- 0
+row.names(l2fc_all_strains_2) <- l2fc_all_strains_2$gene.names
+l2fc_all_strains_2$gene.names <- NULL
+```
+
+
+```{r}
+# -----------------------------------------------
+# Merge Results from Both Batches
+# -----------------------------------------------
+
+l2fc_all_strains <- merge(l2fc_all_strains_1, l2fc_all_strains_2, by = "row.names", all = TRUE)
+l2fc_all_strains[is.na(l2fc_all_strains)] <- 0
+rownames(l2fc_all_strains) <- l2fc_all_strains$Row.names
+l2fc_all_strains$Row.names <- NULL
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 1D
+# -----------------------------------------------
+
+# Load required libraries
+library(ggplot2)
+library(reshape2)
+library(ggridges)
+
+# Sort columns alphabetically
+l2fc.all.strains <- l2fc.all.strains[, order(names(l2fc.all.strains))]
+
+# Separate sense and antisense data
+l2fc.all.strains.sense <- l2fc.all.strains[!grepl("\\.rc", rownames(l2fc.all.strains)), ]
+rownames(l2fc.all.strains.sense) <- gsub("\\.rc", "", rownames(l2fc.all.strains.sense))
+colnames(l2fc.all.strains.sense) <- c("fft1", "fft2", "fft3", "hrp1", "hrp3", "irc20", "mit1", "rrp1", "rrp2", "snf22", "swr1")
+
+l2fc.all.strains.antisense <- l2fc.all.strains[grepl("\\.rc", rownames(l2fc.all.strains)), ]
+rownames(l2fc.all.strains.antisense) <- gsub("\\.rc", "", rownames(l2fc.all.strains.antisense))
+colnames(l2fc.all.strains.antisense) <- c("fft1", "fft2", "fft3", "hrp1", "hrp3", "irc20", "mit1", "rrp1", "rrp2", "snf22", "swr1")
+
+# Melt data for plotting
+l2fc.sense.long <- melt(l2fc.all.strains.sense)
+names(l2fc.sense.long) <- c("strain", "log2FC")
+
+l2fc.antisense.long <- melt(l2fc.all.strains.antisense)
+names(l2fc.antisense.long) <- c("strain", "log2FC")
+
+# -----------------------------------------------
+# Plotting
+# -----------------------------------------------
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with your desired output directory
+
+# Plot for sense strand
+p1_sense <- ggplot(data = l2fc.sense.long, aes(x = log2FC, y = strain, fill = strain)) +
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "black") +
+  geom_density_ridges(rel_min_height = 0.01, alpha = 0.5, scale = 1) +
+  scale_y_discrete(limits = rev(levels(l2fc.sense.long$strain))) +
+  labs(title = "Log2 Fold Change of Genes (Sense Strand)", x = "Log2 Fold Change", y = "Strain") +
+  theme_minimal() +
+  xlim(-2.5, 2.5) +
+  scale_fill_discrete(name = "Strain") +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1),
+    panel.grid.minor = element_blank()
+  )
+
+# Save sense strand plot
+ggsave(p1_sense, filename = file.path(output_dir, "sense_density_ridges.pdf"), height = 12, width = 10, units = "cm")
+
+# Plot for antisense strand
+p1_antisense <- ggplot(data = l2fc.antisense.long, aes(x = log2FC, y = strain, fill = strain)) +
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "black") +
+  geom_density_ridges(rel_min_height = 0.01, alpha = 0.5, scale = 1) +
+  scale_y_discrete(limits = rev(levels(l2fc.antisense.long$strain))) +
+  labs(title = "Log2 Fold Change of Genes (Antisense Strand)", x = "Log2 Fold Change", y = "Strain") +
+  theme_minimal() +
+  xlim(-2.5, 5) +
+  scale_fill_discrete(name = "Strain") +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1),
+    panel.grid.minor = element_blank()
+  )
+
+# Save antisense strand plot
+ggsave(p1_antisense, filename = file.path(output_dir, "antisense_density_ridges.pdf"), height = 12, width = 10, units = "cm")
+
+# Completion message
+cat("Plots saved successfully to:", output_dir, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S6A
+# -----------------------------------------------
+
+# Load required libraries
+library(pheatmap)
+library(dplyr)
+library(matrixStats)
+
+
+
+# Perform k-means clustering
+set.seed(123)  # Set seed for reproducibility
+kmeans_clusters <- kmeans(l2fc.all.strains.sense, centers = 4)
+
+# Save or load k-means clustering results
+# Uncomment the following line to save the clustering results
+# write.table(data.frame(kmeans_clusters$cluster), file = "/path/to/output/all_clusters.txt", sep = "\t", quote = FALSE, row.names = TRUE, col.names = TRUE)
+
+# Load clustering results (if already saved)
+kmeans_clusters <- read.table("/path/to/input/all_clusters.txt", header = TRUE, sep = "\t")
+
+# Add cluster information to the data
+l2fc.all.strains.sense$Cluster <- kmeans_clusters$cluster
+
+# Calculate variance for each gene
+l2fc.all.strains.sense$variance <- rowVars(as.matrix(l2fc.all.strains.sense[, 1:11]))
+
+# Add gene names as a column for ordering
+l2fc.all.strains.sense$gene.names <- rownames(l2fc.all.strains.sense)
+
+# Order data by cluster and variance
+l2fc.all.strains.sense <- l2fc.all.strains.sense %>%
+  arrange(Cluster, variance)
+
+# Reset row names after ordering
+rownames(l2fc.all.strains.sense) <- l2fc.all.strains.sense$gene.names
+
+# -----------------------------------------------
+# Heatmap Generation
+# -----------------------------------------------
+
+# Define heatmap color breaks and palette
+breaks <- c(seq(-4, -0.5, 0.01), seq(0.5, 4, 0.01))
+colors <- colorRampPalette(c("#000df2", "white", "#c30017"))(length(breaks))
+
+# Generate heatmap
+heatmap_plot <- pheatmap(
+  l2fc.all.strains.sense[, 1:11],  # Select only log2FC columns
+  breaks = breaks,
+  color = colors,
+  annotation_row = data.frame(Cluster = l2fc.all.strains.sense$Cluster),
+  cluster_rows = FALSE,  # Do not cluster rows (already ordered by variance)
+  labels_row = "",       # Remove row labels for cleaner visualization
+  cluster_cols = TRUE,   # Cluster columns
+  fontsize = 10,
+  fontsize_row = 8,
+  fontsize_col = 15
+)
+
+# -----------------------------------------------
+# Save Heatmap
+# -----------------------------------------------
+
+# Define output path
+output_file <- "/path/to/output/Heatmap_l2FC_all_genotypes_kmeans_by_variance.tiff"  # Replace with your desired path
+
+# Save heatmap as a TIFF file
+ggsave(
+  filename = output_file,
+  plot = heatmap_plot,
+  height = 12,
+  width = 16,
+  units = "cm"
+)
+
+# Completion message
+cat("Heatmap saved successfully to:", output_file, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S6B
+# -----------------------------------------------
+
+
+# Load required libraries
+library(ggplot2)
+
+# Define input and output paths
+input_file <- "/path/to/all_clusters.txt"  # Replace with the actual path to your input file
+output_file <- "/path/to/output/p2.pdf"  # Replace with the desired output file path
+
+# Read the clustering data
+all_clusters <- read.table(input_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+# Add gene IDs as a column
+all_clusters$gene_id <- rownames(all_clusters)
+
+# View the structure of the data (optional)
+str(all_clusters)
+
+# Define the gene universe and a sample gene list (replace with actual data)
+gene_universe <- unique(all_clusters$gene_id)  # Replace with your actual gene universe
+SRlist <- readLines("/path/to/sexualreproductionlist.txt") # Replace with your actual gene list
+
+# -----------------------------------------------
+# Fisher's Test Function
+# -----------------------------------------------
+
+# Function to perform Fisher's test and return odds ratio and p-value
+perform_fisher_test <- function(cluster_genes, gene_list, gene_universe) {
+  # Create a contingency table
+  overlap <- length(intersect(cluster_genes, gene_list))
+  only_cluster <- length(setdiff(cluster_genes, gene_list))
+  only_list <- length(setdiff(gene_list, cluster_genes))
+  neither <- length(setdiff(gene_universe, union(cluster_genes, gene_list)))
+  
+  contingency_table <- matrix(c(overlap, only_cluster, only_list, neither), nrow = 2)
+  
+  # Perform Fisher's test
+  test_result <- fisher.test(contingency_table)
+  
+  # Return both odds ratio and p-value
+  return(list(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+}
+
+# -----------------------------------------------
+# Perform Fisher's Test for Each Cluster
+# -----------------------------------------------
+
+# Get unique clusters
+unique_clusters <- unique(all_clusters$l2fc.kmeans.cluster)
+
+# Initialize vectors to store odds ratios and p-values
+odds_ratios <- numeric(length(unique_clusters))
+p_values <- numeric(length(unique_clusters))
+
+# Perform Fisher's test for each cluster
+for (i in seq_along(unique_clusters)) {
+  cluster <- unique_clusters[i]
+  cluster_genes <- all_clusters$gene_id[all_clusters$l2fc.kmeans.cluster == cluster]
+  test_result <- perform_fisher_test(cluster_genes, SRlist, gene_universe)
+  odds_ratios[i] <- test_result$odds_ratio
+  p_values[i] <- test_result$p_value
+}
+
+# Create a data frame for plotting
+plot_data <- data.frame(
+  Cluster = unique_clusters,
+  OddsRatio = odds_ratios,
+  PValue = p_values
+)
+
+# -----------------------------------------------
+# Generate Enrichment Plot
+# -----------------------------------------------
+
+# Create the bar plot
+p2 <- ggplot(plot_data, aes(x = factor(Cluster), y = OddsRatio)) +
+  geom_bar(stat = "identity", fill = "gray", color = "black", size = 1) +  # Add border with size 1
+  geom_hline(yintercept = 1, linetype = "dotted", color = "black", size = 1) +  # Add a dotted line at Odds Ratio = 1
+  geom_text(aes(label = sprintf("p=%.3g", PValue)), vjust = -0.5, size = 3.5) +
+  coord_flip() +  # Flip the axes for better readability
+  labs(
+    title = "Fisher's Test Enrichment Results",
+    x = "Gene Set",
+    y = "Odds Ratio"
+  ) +
+  ylim(0, 2) +  # Adjust y-axis limits
+  theme_minimal(base_size = 14) +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# -----------------------------------------------
+# Save the Plot
+# -----------------------------------------------
+
+# Save the plot as a PDF
+ggsave(output_file, plot = p2, width = 3.5, height = 3.5)
+
+# Completion message
+cat("Plot saved successfully to:", output_file, "\n")
+```
+

@@ -1,0 +1,702 @@
+# -----------------------------------------------
+# Script for PRO-seq Analysis (Figure 2C, 2D, 3A, 3B, S3B) & correlation analysis with MNase-seq (Figure 3E, 3F)
+# Author: [Jian Yi Kok]
+# Date: [2025-07-17]
+# Description: This script processes PRO-seq data, calculates antisense
+#              counts, performs differential expression analysis, and
+#              generates boxplots for L2FC values.
+# -----------------------------------------------
+
+```{r}
+# -----------------------------------------------
+# Figure 2C
+# -----------------------------------------------
+
+# Load required libraries
+library(ggsci)
+library(DESeq2)
+library(ggpubr)
+library(viridis)
+library(scales)
+library(rtracklayer)
+library(GenomicRanges)
+library(BiocParallel)
+library(tiff)
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(circlize)
+library(BRGenomics)
+library(extrafont)
+library(FSA)
+library(tidyverse)
+library(GenomicFeatures)
+
+# Define paths
+bw_path <- "/path/to/bw/files/"  # Replace with actual path
+gtf_file <- "/path/to/annotations.gtf"  # Replace with actual GTF file path
+output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
+
+# Define sample metadata
+metadata <- data.frame(
+  sample = c("WT_PRO_rep1", "WT_PRO_rep2", "hrp1_PRO_rep1", "hrp1_PRO_rep2", 
+             "hrp3_PRO_rep1", "hrp3_PRO_rep2", "hrp13_PRO_rep1", "hrp13_PRO_rep2"),
+  condition = factor(c("WT", "WT", "hrp1", "hrp1", "hrp3", "hrp3", "hrp13", "hrp13"),
+                     levels = c("WT", "hrp1", "hrp3", "hrp13"))
+)
+rownames(metadata) <- metadata$sample
+
+# -----------------------------------------------
+# Functions
+# -----------------------------------------------
+
+# Function to export stranded bigWig files
+export.bw.stranded <- function(name, path, GRanges.lst) {
+  export.bw(
+    GRanges.lst[[name]][strand(GRanges.lst[[name]]) == "+"],
+    paste0(path, name, "_fwd.bw")
+  )
+  export.bw(
+    GRanges.lst[[name]][strand(GRanges.lst[[name]]) == "-"],
+    paste0(path, name, "_rev.bw")
+  )
+}
+
+# Function to normalize GRanges object to RPM
+RPMnorm <- function(gr) {
+  gr$score <- (1e6 / sum(gr$score)) * gr$score
+  return(gr)
+}
+
+# Function to calculate antisense counts
+get_antisense_counts <- function(gr, antisense_genes) {
+  counts <- summarizeOverlaps(features = antisense_genes, reads = gr, mode = "Union")
+  assay(counts)[, 1]
+}
+
+# -----------------------------------------------
+# Data Preparation
+# -----------------------------------------------
+
+# Load gene annotations
+gene_annotations <- rtracklayer::import(gtf_file, format = "gtf")
+genes <- gene_annotations[gene_annotations$type == "gene"]
+
+# Create antisense regions
+antisense_genes <- genes
+strand(antisense_genes) <- ifelse(strand(genes) == "+", "-", "+")
+
+# Load PRO-seq data
+PROseq.lst <- list(
+  "WT_PRO_rep1" = import_bigWig(file.path(bw_path, "WT_R1_fwd.bw"), file.path(bw_path, "WT_R1_rev.bw")),
+  "WT_PRO_rep2" = import_bigWig(file.path(bw_path, "WT_R2_fwd.bw"), file.path(bw_path, "WT_R2_rev.bw")),
+  "hrp1_PRO_rep1" = import_bigWig(file.path(bw_path, "Hrp1_R1_fwd.bw"), file.path(bw_path, "Hrp1_R1_rev.bw")),
+  "hrp1_PRO_rep2" = import_bigWig(file.path(bw_path, "Hrp1_R2_fwd.bw"), file.path(bw_path, "Hrp1_R2_rev.bw")),
+  "hrp3_PRO_rep1" = import_bigWig(file.path(bw_path, "Hrp3_R1_fwd.bw"), file.path(bw_path, "Hrp3_R1_rev.bw")),
+  "hrp3_PRO_rep2" = import_bigWig(file.path(bw_path, "Hrp3_R2_fwd.bw"), file.path(bw_path, "Hrp3_R2_rev.bw")),
+  "hrp13_PRO_rep1" = import_bigWig(file.path(bw_path, "Hrp13_R1_fwd.bw"), file.path(bw_path, "Hrp13_R1_rev.bw")),
+  "hrp13_PRO_rep2" = import_bigWig(file.path(bw_path, "Hrp13_R2_fwd.bw"), file.path(bw_path, "Hrp13_R2_rev.bw"))
+)
+
+# Create antisense count matrix
+count_matrix <- do.call(cbind, lapply(names(PROseq.lst), function(sample) {
+  gr <- PROseq.lst[[sample]]
+  get_antisense_counts(gr, antisense_genes)
+}))
+colnames(count_matrix) <- names(PROseq.lst)
+rownames(count_matrix) <- genes$gene_id
+
+# Save antisense count matrix
+write.csv(count_matrix, file.path(output_dir, "antisense_gene_counts.csv"), row.names = TRUE)
+
+# -----------------------------------------------
+# DESeq2 Analysis
+# -----------------------------------------------
+
+# Create DESeq2 dataset
+dds <- DESeqDataSetFromMatrix(
+  countData = count_matrix,
+  colData = metadata,
+  design = ~ condition
+)
+
+# Run DESeq2
+dds <- DESeq(dds)
+
+# Perform L2FC shrinkage
+coefficients_to_use <- c("condition_hrp1_vs_WT", "condition_hrp3_vs_WT", "condition_hrp13_vs_WT")
+l2fc_list <- lapply(coefficients_to_use, function(coef) {
+  res <- lfcShrink(dds, coef = coef, type = "apeglm")
+  data.frame(
+    gene = rownames(res),
+    l2fc = res$log2FoldChange,
+    comparison = gsub("condition_", "", coef)
+  )
+})
+l2fc_df <- do.call(rbind, l2fc_list)
+
+# -----------------------------------------------
+# Boxplot for Shrunken L2FC
+# -----------------------------------------------
+
+# Clean up comparison names
+l2fc_df$comparison <- gsub("_vs_", " vs ", l2fc_df$comparison)
+l2fc_df$comparison <- factor(l2fc_df$comparison, levels = c("hrp1 vs WT", "hrp3 vs WT", "hrp13 vs WT"))
+
+# Create boxplot
+p1 <- ggplot(l2fc_df, aes(x = comparison, y = l2fc, fill = comparison)) +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "black") +
+  geom_boxplot(outlier.shape = NA) +
+  labs(
+    title = "Shrunken Log2 Fold Change (L2FC) of Antisense Counts",
+    x = "Comparison",
+    y = "Shrunken Log2 Fold Change (L2FC)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    text = element_text(size = 15),
+    legend.position = "none"
+  )
+
+# Save the boxplot
+ggsave(file.path(output_dir, "p1.pdf"), plot = p1, width = 4.5, height = 3.5)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Analysis completed. Plots and data saved to:", output_dir, "\n")
+
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 2D
+# -----------------------------------------------
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(GenomicRanges)
+
+# Define paths
+output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Normalize antisense regions
+opposite_genes_gr <- genes.gr
+strand(opposite_genes_gr) <- ifelse(strand(genes.gr) == "+", "-", "+")
+normalized_antisense_regions <- resize(opposite_genes_gr, width = 1000, fix = "center")  # Set width to 1000 bp
+
+# Subsample antisense regions
+meta_output <- metaSubsample(
+  PROseq_merged_normed.lst,
+  normalized_antisense_regions,
+  binsize = 25,            # Adjust binsize as needed
+  first.output.xval = 0    # Start at TSS
+)
+
+# Update sample names
+meta_output$sample.name[meta_output$sample.name == "WT_PRO"] <- "WT"
+meta_output$sample.name[meta_output$sample.name == "hrp1_PRO"] <- "hrp1"
+meta_output$sample.name[meta_output$sample.name == "hrp3_PRO"] <- "hrp3"
+meta_output$sample.name[meta_output$sample.name == "hrp13_PRO"] <- "hrp1_hrp3"
+
+# Add x-axis positions and factorize sample names
+meta_output <- meta_output %>%
+  group_by(sample.name) %>%
+  mutate(x = seq(0, 1000, length.out = n())) %>%
+  ungroup() %>%
+  mutate(sample.name = factor(sample.name, levels = c("WT", "hrp1", "hrp3", "hrp1_hrp3")))
+
+# Generate metaplot for antisense regions
+p2 <- ggplot(meta_output, aes(x = x, y = mean)) +
+  geom_ribbon(data = subset(meta_output, sample.name == "WT"), aes(ymin = 0, ymax = mean), fill = "#D3D3D3") +
+  geom_line(aes(color = sample.name), size = 1) +
+  scale_color_manual(values = c(WT = "#D3D3D3", hrp1 = "#0072B2", hrp3 = "#CC79A7", hrp1_hrp3 = "#E69F00")) +
+  scale_x_continuous(breaks = seq(0, 1000, by = 200), limits = c(0, 1000)) +
+  labs(
+    x = "Distance from TSS (bp)",
+    y = "Mean PRO-seq signal"
+  ) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save the plot
+ggsave(
+  filename = file.path(output_dir, "p2.pdf"),
+  plot = p2,
+  height = 7.5,
+  width = 10,
+  units = "cm"
+)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Analysis completed. Plot saved to:", output_dir, "\n")
+```
+
+```{r}
+# Normalize PRO-seq data using Reads Per Million (RPM)
+PROseq_normed.lst <- lapply(PROseq.lst, RPMnorm)
+
+# Merge replicates
+PROseq_merged.lst <- list(
+  "WT_PRO" = mergeGRangesData(PROseq.lst$WT_PRO_rep1, PROseq.lst$WT_PRO_rep2),
+  "hrp1_PRO" = mergeGRangesData(PROseq.lst$hrp1_PRO_rep1, PROseq.lst$hrp1_PRO_rep2),
+  "hrp3_PRO" = mergeGRangesData(PROseq.lst$hrp3_PRO_rep1, PROseq.lst$hrp3_PRO_rep2),
+  "hrp13_PRO" = mergeGRangesData(PROseq.lst$hrp13_PRO_rep1, PROseq.lst$hrp13_PRO_rep2)
+)
+
+# Normalize merged data
+PROseq_merged_normed.lst <- lapply(PROseq_merged.lst, RPMnorm)
+
+# Export merged normalized bigWig files
+merged_bw_path <- file.path(output_dir, "merged_normed/")
+dir.create(merged_bw_path, showWarnings = FALSE)
+lapply(names(PROseq_merged_normed.lst), export.bw.stranded, path = merged_bw_path, GRanges.lst = PROseq_merged_normed.lst)
+
+# -----------------------------------------------
+# Gene List and Regions
+# -----------------------------------------------
+
+# Load gene annotations
+txdb <- makeTxDbFromGFF(gff_file, organism = "Schizosaccharomyces pombe") # gff files used: all genes for 2D/S3B, all antisense genes for 3A
+
+# Filter out mitochondrial genes
+seqlevels(txdb) <- c("I", "II", "III", "MTR", "AB325691")
+
+# Get list of transcripts
+genes.gr <- tidyChromosomes(transcripts(txdb), keep.X = FALSE, keep.Y = FALSE)
+
+# Remove transcripts smaller than 600bp
+genes.gr <- genes.gr[width(genes.gr) > 600]
+
+# Define promoter regions
+PR.gr <- genebodies(genes.gr, -200, 200, fix.end = "start")
+
+# -----------------------------------------------
+# Figures 3A/S3B
+# -----------------------------------------------
+
+# Subsample promoter regions for forward strand
+PR_sub_fwd.mat <- metaSubsample(PROseq_merged_normed.lst, PR.gr, binsize = 1, first.output.xval = -200)
+PR_sub_fwd.mat$strand <- "fwd"
+
+# Subsample promoter regions for reverse strand
+PR_rev.gr <- invertStrand(PR.gr)
+PR_sub_rev.mat <- metaSubsample(PROseq_merged_normed.lst, PR_rev.gr, binsize = 1, first.output.xval = -200)
+PR_sub_rev.mat$strand <- "rev"
+PR_sub_rev.mat$x <- rev(PR_sub_rev.mat$x)
+PR_sub_rev.mat$mean <- PR_sub_rev.mat$mean * -1
+PR_sub_rev.mat$upper <- PR_sub_rev.mat$upper * -1
+PR_sub_rev.mat$lower <- PR_sub_rev.mat$lower * -1
+
+# Combine forward and reverse strand data
+PR_sub_all.mat <- rbind(PR_sub_fwd.mat, PR_sub_rev.mat)
+
+# Update sample names
+PR_sub_all.mat$sample.name <- gsub("_PRO_rep[12]", "", PR_sub_all.mat$sample.name)
+
+# Filter forward strand data
+PR_sub_all.mat.fwd <- subset(PR_sub_all.mat, strand == "fwd")
+PR_sub_all.mat.fwd$sample.name <- factor(PR_sub_all.mat.fwd$sample.name, levels = c("WT", "hrp1", "hrp3", "hrp13"))
+
+# Plot metaplot
+p3 <- ggplot(PR_sub_all.mat.fwd, aes(x = x, y = mean)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = sample.name), alpha = 0.5) +
+  geom_line(aes(color = sample.name), size = 0.5) +
+  facet_grid(sample.name ~ .) +
+  scale_color_manual(values = c(WT = "#D3D3D3", hrp1 = "#0072B2", hrp3 = "#CC79A7", hrp13 = "#E69F00")) +
+  scale_fill_manual(values = c(WT = "#D3D3D3", hrp1 = "#0072B2", hrp3 = "#CC79A7", hrp13 = "#E69F00")) +
+  scale_x_continuous(breaks = seq(-400, 400, by = 200), limits = c(-400, 400)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  ggtheme.jj() +
+  labs(x = "Distance from TSS (bp)", y = "Mean + 75% CI") +
+  theme(
+    text = element_text(size = 20),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none"
+  )
+
+# Save the plot
+ggsave(file.path(output_dir, "p3_metaplot.pdf"), plot = p3, height = 7.78, width = 7.78, units = "in")
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Analysis completed. Plots and data saved to:", output_dir, "\n")
+```
+
+```{r}
+# Load required libraries
+library(genomation)
+library(ggplot2)
+library(dplyr)
+
+# -----------------------------------------------
+# Figure 3B
+# -----------------------------------------------
+
+# Define paths
+output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define the 200bp downstream region of the TSS
+TSS_downstream_200bp <- genebodies(genes.gr, 0, 200, fix.end = "start")
+
+# Calculate signal for the 200bp downstream region for each strain
+PROseq_signal <- lapply(PROseq_merged_normed.lst, function(gr) {
+  ScoreMatrixBin(target = gr, windows = TSS_downstream_200bp, bin.num = 20, type = "mean")
+})
+
+# Combine signal data into a single data frame
+PROseq_signal_df <- do.call(rbind, lapply(names(PROseq_signal), function(strain) {
+  data.frame(
+    strain = strain,
+    gene_id = rownames(PROseq_signal[[strain]]),
+    mean_signal = rowMeans(PROseq_signal[[strain]], na.rm = TRUE)
+  )
+}))
+
+# Clean up strain names for better readability
+PROseq_signal_df$strain <- factor(
+  PROseq_signal_df$strain,
+  levels = c("WT_PRO", "hrp1_PRO", "hrp3_PRO", "hrp13_PRO"),
+  labels = c("WT", "hrp1", "hrp3", "hrp1_hrp3")
+)
+
+# Calculate the median signal for the WT strain
+WT_median <- PROseq_signal_df %>%
+  dplyr::filter(strain == "WT") %>%
+  dplyr::summarise(median_signal = median(mean_signal, na.rm = TRUE)) %>%
+  dplyr::pull(median_signal)
+
+# Generate the boxplot
+p4 <- ggplot(PROseq_signal_df, aes(x = strain, y = mean_signal, fill = strain)) +
+  geom_hline(yintercept = WT_median, linetype = "dotted", color = "black", size = 1) +  # Add WT median line
+  geom_boxplot(outlier.shape = NA, alpha = 1) +  # Boxplot without outliers
+  scale_fill_manual(
+    values = c(
+      "WT" = "#D3D3D3",
+      "hrp1" = "#0072B2",
+      "hrp3" = "#CC79A7",
+      "hrp1_hrp3" = "#E69F00"
+    )
+  ) +
+  labs(
+    title = "PRO-seq Signal in 200bp Downstream of TSS",
+    x = "Strain",
+    y = "Mean PRO-seq Signal"
+  ) +
+  ylim(0, 0.2) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save the plot
+ggsave(
+  filename = file.path(output_dir, "p4.pdf"),
+  plot = p4,
+  height = 7.5,
+  width = 10,
+  units = "cm"
+)
+
+# -----------------------------------------------
+# Statistical Analysis
+# -----------------------------------------------
+
+# Perform ANOVA
+anova_result <- aov(mean_signal ~ strain, data = PROseq_signal_df)
+
+# Display ANOVA summary
+cat("ANOVA Summary:\n")
+print(summary(anova_result))
+
+# Perform Tukey HSD test
+tukey_result <- TukeyHSD(anova_result)
+
+# Display Tukey HSD results
+cat("\nTukey HSD Results:\n")
+print(tukey_result)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Analysis completed. Plot and statistical results saved to:", output_dir, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 3E
+# -----------------------------------------------
+
+# Load required libraries
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Define paths
+MNase_matrix_files <- list(
+  "WT_PRO" = "/path/to/WT_as_mnase.mat",  # Replace with actual path
+  "hrp1_PRO" = "/path/to/hrp1_as_mnase.mat",  # Replace with actual path
+  "hrp3_PRO" = "/path/to/hrp3_as_mnase.mat",  # Replace with actual path
+  "hrp13_PRO" = "/path/to/hrp1hrp3_as_mnase.mat"  # Replace with actual path
+)
+output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Initialize an empty list to store results for all strains
+MNase_all_strains_results <- list()
+
+# Loop through all MNase-seq strains
+for (strain_name in names(MNase_matrix_files)) {
+  # Load the computeMatrix output file
+  matrix_data <- fread(MNase_matrix_files[[strain_name]], header = FALSE)
+  
+  # Extract metadata and signal matrix
+  metadata <- matrix_data[, 1:6]  # Assuming the first 6 columns are metadata
+  signal_matrix <- as.matrix(matrix_data[, 7:ncol(matrix_data)])  # Signal data
+  
+  # Subset the signal matrix for the 500bp upstream region
+  upstream_signal <- signal_matrix[, 31:80]  # 50 bins for 500bp (10 bp/bin)
+  
+  # Combine metadata and upstream signal into a single dataframe
+  combined_data <- cbind(metadata, upstream_signal)
+  
+  # Add strain information
+  combined_data <- combined_data %>%
+    dplyr::mutate(strain = strain_name)  # Add strain name as a column
+  
+  # Rename gene IDs in the desired format
+  combined_data <- combined_data %>%
+    dplyr::mutate(
+      V4 = dplyr::case_when(
+        stringr::str_detect(V4, "_r1") ~ stringr::str_replace(V4, "_r1", ".2"),  # Replace _r1 with .2
+        stringr::str_detect(V4, "_r2") ~ stringr::str_replace(V4, "_r2", ".3"),  # Replace _r2 with .3
+        TRUE ~ paste0(V4, ".1")  # Append .1 to all other gene IDs
+      )
+    )
+  
+  # Calculate the mean signal for each gene
+  strain_results <- combined_data %>%
+    dplyr::group_by(strain, V4) %>%  # Group by strain and gene ID (V4 contains gene IDs)
+    dplyr::summarise(dplyr::across(V37:V86, mean, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_longer(cols = V37:V86, names_to = "bin", values_to = "MNase_signal") %>%
+    dplyr::rename(gene_id = V4)  # Rename V4 to gene_id
+  
+  # Store the results for the current strain
+  MNase_all_strains_results[[strain_name]] <- strain_results
+}
+
+# Combine results for all strains into a single dataframe
+MNase_final_df <- dplyr::bind_rows(MNase_all_strains_results)
+
+# Aggregate MNase-seq signal across bins
+MNase_aggregated <- MNase_final_df %>%
+  dplyr::filter(bin %in% paste0("V", 37:86)) %>%  # Filter bins V37 to V86
+  dplyr::group_by(strain, gene_id) %>%  # Group by strain and gene_id
+  dplyr::summarise(mean_MNase_signal = median(MNase_signal, na.rm = TRUE), .groups = "drop")  # Calculate mean signal
+
+# Set the order of strains
+MNase_aggregated <- MNase_aggregated %>%
+  dplyr::mutate(strain = factor(strain, levels = c("WT_PRO", "hrp1_PRO", "hrp3_PRO", "hrp13_PRO")))
+
+# Calculate the median MNase-seq signal for the WT strain
+WT_median <- MNase_aggregated %>%
+  dplyr::filter(strain == "WT_PRO") %>%
+  dplyr::summarise(median_signal = median(mean_MNase_signal, na.rm = TRUE)) %>%
+  dplyr::pull(median_signal)
+
+# Generate the boxplot
+p5 <- ggplot(MNase_aggregated, aes(x = strain, y = mean_MNase_signal, fill = strain)) +
+  geom_hline(yintercept = WT_median, linetype = "dotted", color = "black", size = 1) +  # Add dotted hline
+  geom_boxplot(outlier.shape = NA, alpha = 1) +  # Boxplot without outliers
+  labs(
+    title = "MNase-seq Signal in 500bp Upstream of TSS",
+    x = "Strain",
+    y = "Mean MNase-seq Signal"
+  ) +
+  ylim(0, 10) +
+  scale_fill_manual(
+    values = c(
+      "WT_PRO" = "#D3D3D3",
+      "hrp1_PRO" = "#0072B2",
+      "hrp3_PRO" = "#CC79A7",
+      "hrp13_PRO" = "#E69F00"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save the plot
+ggsave(
+  filename = file.path(output_dir, "p5.pdf"),
+  plot = p5,
+  height = 7.5,
+  width = 10,
+  units = "cm"
+)
+
+# -----------------------------------------------
+# Statistical Analysis
+# -----------------------------------------------
+
+# Perform ANOVA
+anova_result <- aov(mean_MNase_signal ~ strain, data = MNase_aggregated)
+
+# Display ANOVA summary
+cat("ANOVA Summary:\n")
+print(summary(anova_result))
+
+# Perform Tukey HSD test
+tukey_result <- TukeyHSD(anova_result)
+
+# Display Tukey HSD results
+cat("\nTukey HSD Results:\n")
+print(tukey_result)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Analysis completed. Plot and statistical results saved to:", output_dir, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 3F
+# -----------------------------------------------
+
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+
+# Use the MNase-seq signal from the 500bp upstream region (from the previous prompt)
+MNase_aggregated <- MNase_final_df %>%
+  dplyr::filter(bin %in% paste0("V", 37:86)) %>%  # Filter bins V37 to V86
+  dplyr::group_by(strain, gene_id) %>%  # Group by strain and gene_id
+  dplyr::summarise(
+    MNaseseq_signal = mean(MNase_signal, na.rm = TRUE),  # Mean signal
+    MNaseseq_sd = sd(MNase_signal, na.rm = TRUE),       # Standard deviation
+    MNaseseq_sem = MNaseseq_sd / sqrt(n()),             # Standard error of the mean
+    .groups = "drop"
+  )
+
+# Use the PRO-seq signal from the 200bp downstream region
+Mean_signal_200bp <- PR_sub_all.mat.fwd %>%
+  filter(x >= 0 & x <= 200) %>%
+  group_by(sample.name) %>%
+  summarise(
+    Mean_signal = mean(mean, na.rm = TRUE),  # Mean signal
+    Mean_signal_sd = sd(mean, na.rm = TRUE), # Standard deviation
+    Mean_signal_sem = Mean_signal_sd / sqrt(n()), # Standard error of the mean
+    .groups = "drop"
+  )
+
+# Merge MNase-seq and PRO-seq data
+merged_data <- MNase_aggregated %>%
+  inner_join(Mean_signal_200bp, by = c("strain" = "sample.name"))
+
+# Calculate the correlation and p-value
+correlation_test <- cor.test(merged_data$MNaseseq_signal, merged_data$Mean_signal)
+correlation_coefficient <- round(correlation_test$estimate, 2)
+p_value <- correlation_test$p.value
+
+# Create the scatter plot with SEM error bars and log-transformed axes
+p6 <- ggplot(merged_data, aes(x = MNaseseq_signal, y = Mean_signal)) +
+  # Add SEM error bars for the y-axis (Mean_signal)
+  geom_errorbar(aes(ymin = Mean_signal - Mean_signal_sem, 
+                    ymax = Mean_signal + Mean_signal_sem), 
+                width = 0.1, color = "gray") +
+  # Add SEM error bars for the x-axis (MNaseseq_signal)
+  geom_errorbarh(aes(xmin = MNaseseq_signal - MNaseseq_sem, 
+                     xmax = MNaseseq_signal + MNaseseq_sem), 
+                 height = 0.1, color = "gray") +
+  # Add scatter points
+  geom_point(color = "black", size = 3, alpha = 1) +
+  # Add regression line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  # Add labels and title
+  labs(
+    title = "Log-Transformed Correlation with SEM Error Bars",
+    x = "Log(MNase Signal)",
+    y = "Log(Mean PRO-seq Signal)"
+  ) +
+  # Annotate with correlation coefficient and p-value
+  annotate(
+    "text",
+    x = min(merged_data$MNaseseq_signal) + 0.1 * diff(range(merged_data$MNaseseq_signal)),
+    y = max(merged_data$Mean_signal) - 0.1 * diff(range(merged_data$Mean_signal)),
+    label = paste0("r = ", correlation_coefficient, "\n", "p = ", signif(p_value, 3)),
+    size = 5,
+    color = "black"
+  ) +
+  # Log-transform both axes
+  scale_x_log10() +
+  scale_y_log10() +
+  # Use a minimal theme
+  theme_minimal() +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save the plot
+ggsave(
+  filename = "/path/to/output/plots/p6.pdf",  # Replace with desired path
+  plot = p6,
+  height = 7.5,
+  width = 7.5,
+  units = "cm"
+)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Correlation analysis completed. Plot saved to: /path/to/output/plots/s2f_correlation_plot.pdf\n")
+```
+

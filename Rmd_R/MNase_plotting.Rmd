@@ -1,0 +1,317 @@
+# -----------------------------------------------
+# Script for MNase-seq Plots (Figure 1B, 1C, 3D, 7F)
+# Author: [Jian Yi Kok]
+# Date: [2025-07-17]
+# Description: This script generates MNase-seq plots from deeptools computematrix output.
+# -----------------------------------------------
+
+```{r}
+# -----------------------------------------------
+# Figure 1B
+# -----------------------------------------------
+
+# Load required libraries
+library(tidyr)
+library(dplyr)
+library(pracma)
+library(ggplot2)
+
+# 1. Define input and output paths
+input_file <- "/path/to/(remodeler)_vs_WT.tab"  # Replace with the actual path to your input file
+output_dir <- "/path/to/output/plots/"     # Replace with the directory where plots will be saved
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)  # Create output directory if it doesn't exist
+
+# 2. Read the MNase-seq data
+MNaseseq <- read.table(input_file, header = TRUE, sep = "\t")
+
+# 3. Reshape the data to long format
+MNaseseq.long <- pivot_longer(
+  MNaseseq,
+  cols = everything(),
+  names_to = c("strain", "position"),
+  names_sep = "\\.",
+  values_to = "Signal"
+)
+
+# 4. Process the data
+MNaseseq.long$position <- as.numeric(MNaseseq.long$position) * 10  # Convert positions to numeric and scale
+MNaseseq.long$position[is.na(MNaseseq.long$position)] <- 0         # Replace NA positions with 0
+
+# 5. Calculate mean signal for each strain and position
+MNaseseq.means <- MNaseseq.long %>%
+  group_by(strain, position) %>%
+  summarise(MeanSignal = mean(Signal, na.rm = TRUE), .groups = 'drop')
+
+# 6. Define strains to analyze
+strains <- c("fft1", "fft2", "fft3", "hrp1", "hrp3", "mit1", "rrp1", "rrp2", "snf22", "irc20", "swr1")
+
+# 7. Loop through each strain and create a plot
+for (strain in strains) {
+  # Filter data for WT and the current strain
+  plot_data <- MNaseseq.means %>%
+    filter(strain %in% c("WT", strain)) %>%
+    mutate(strain = factor(strain, levels = c("WT", strain)))
+  
+  # Define colors for the plot
+  strain_colors <- c("WT" = "#D3D3D3", strain = "#0072B2")  # Adjust color for the strain
+  
+  # Create the plot
+  p <- ggplot(plot_data, aes(x = position, y = MeanSignal, color = strain)) +
+    geom_ribbon(data = subset(plot_data, strain == "WT"), aes(ymin = 0, ymax = MeanSignal), fill = "#D3D3D3") +
+    geom_line(linewidth = 1) +  # Add lines
+    labs(title = paste("MNase-seq:", strain, "vs WT"),
+         x = "Position from TSS",
+         y = "Nucleosome density",
+         color = "") +
+    theme_minimal() +  # Apply minimal theme 
+    scale_x_continuous(breaks = seq(0, 1600, by = 400), limits = c(0, 1600), position = "bottom") +
+    scale_y_continuous(breaks = seq(0, 15, by = 3), limits = c(0, 15)) +
+    scale_color_manual(values = strain_colors) +
+    theme(
+      text = element_text(size = 15), 
+      plot.title = element_text(hjust = 0.5), 
+      legend.position = "none", 
+      panel.border = element_rect(color = "black", fill = NA, size = 1), 
+      panel.grid.major = element_blank(),  # Remove major gridlines
+      panel.grid.minor = element_blank(),
+      axis.ticks = element_line(color = "black", linewidth = 0.5),
+      axis.ticks.length = unit(0.4, "cm"),
+      axis.text.y = element_text(angle = 90, hjust = 0.5)
+    )
+  
+  # Save the plot
+  output_file <- paste0(output_dir, strain, "_vs_WT.pdf")
+  ggsave(p, filename = output_file, height = 7.5, width = 10, units = "cm")
+  
+  # Print a message
+  cat("Plot saved for strain:", strain, "\n")
+}
+
+# Completion message
+cat("All plots created and saved successfully.\n")
+
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 1D
+# -----------------------------------------------
+
+# Load required libraries
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+# 1. Define input and output paths
+input_file <- "/path/to/CHD1_mnase.tab"  # Replace with the actual path to your input file
+output_file <- "/path/to/output/plots/plot_mn.pdf"  # Replace with the desired output file path
+
+# 2. Read the MNase-seq data
+MNaseseq <- read.table(input_file, header = TRUE, sep = "\t", skip = 2)
+
+# 3. Clean and process column names
+colnames(MNaseseq) <- gsub("hrp1\\.hrp3", "hrp1hrp3", colnames(MNaseseq))
+
+# 4. Reshape the data to long format
+MNaseseq.long <- pivot_longer(
+  MNaseseq,
+  cols = everything(),
+  names_to = c("strain", "position"),
+  names_sep = "\\.",
+  values_to = "Signal"
+)
+
+# 5. Process the data
+MNaseseq.long$position <- as.numeric(MNaseseq.long$position) * 10  # Convert positions to numeric and scale
+MNaseseq.long$position[is.na(MNaseseq.long$position)] <- 0         # Replace NA positions with 0
+
+# 6. Calculate mean signal for each strain and position
+MNaseseq.means <- MNaseseq.long %>%
+  group_by(strain, position) %>%
+  summarise(MeanSignal = mean(Signal, na.rm = TRUE), .groups = 'drop')  # Calculate mean signal
+
+# 7. Set strain order for plotting
+MNaseseq.means$strain <- factor(MNaseseq.means$strain, levels = c("WT", "hrp1", "hrp3", "hrp1hrp3"))
+
+# 8. Create the plot
+p1 <- ggplot(MNaseseq.means, aes(x = position, y = MeanSignal, color = strain)) +
+  geom_ribbon(data = subset(MNaseseq.means, strain == "WT"), aes(ymin = 0, ymax = MeanSignal), fill = "#D3D3D3") +
+  geom_line(linewidth = 1) +  # Add lines
+  labs(title = "MNase-seq",
+       x = "Position from TSS",
+       y = "Nucleosome density",
+       color = "") +
+  geom_vline(xintercept = 800, linetype = "dotted", color = "black") +
+  theme_minimal() +  # Apply minimal theme 
+  scale_x_continuous(breaks = seq(0, 1600, by = 800), limits = c(0, 1600)) +
+  scale_y_continuous(breaks = seq(0, 12, by = 3), limits = c(0, 12)) +
+  scale_color_manual(values = c("WT" = "#D3D3D3", "hrp1" = "#0072B2", "hrp3" = "#CC79A7", "hrp1hrp3" = "#E69F00")) +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.major = element_blank(),  # Remove major gridlines
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# 9. Save the plot
+ggsave(p1, filename = output_file, height = 7.5, width = 10, units = "cm")
+
+# Completion message
+cat("Plot saved successfully to:", output_file, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 3D
+# -----------------------------------------------
+
+# Load required libraries
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+# 1. Define input and output paths
+input_file <- "/path/to/as_mnase.tab"  # Replace with the actual path to your input file
+output_file <- "/path/to/output/plots/p2.pdf"  # Replace with the desired output file path
+
+# 2. Read the MNase-seq data
+MNaseseq <- read.table(input_file, header = TRUE, sep = "\t", skip = 2)
+
+# 3. Clean and process column names
+colnames(MNaseseq) <- gsub("hrp1\\.hrp3", "hrp1hrp3", colnames(MNaseseq))
+
+# 4. Reshape the data to long format
+MNaseseq.long <- pivot_longer(
+  MNaseseq,
+  cols = everything(),
+  names_to = c("strain", "position"),
+  names_sep = "\\.",
+  values_to = "Signal"
+)
+
+# 5. Process the data
+MNaseseq.long$position <- as.numeric(MNaseseq.long$position) * 10  # Convert positions to numeric and scale
+MNaseseq.long$position[is.na(MNaseseq.long$position)] <- 0         # Replace NA positions with 0
+
+# 6. Calculate mean signal for each strain and position
+MNaseseq.means <- MNaseseq.long %>%
+  group_by(strain, position) %>%
+  summarise(MeanSignal = mean(Signal, na.rm = TRUE), .groups = 'drop')  # Calculate mean signal
+
+# 7. Set strain order for plotting
+MNaseseq.means$strain <- factor(MNaseseq.means$strain, levels = c("WT", "hrp1", "hrp3", "hrp1hrp3"))
+
+# 8. Create the plot
+p2 <- ggplot(MNaseseq.means, aes(x = position, y = MeanSignal, color = strain)) +
+  geom_ribbon(data = subset(MNaseseq.means, strain == "WT"), aes(ymin = 0, ymax = MeanSignal), fill = "#D3D3D3") +
+  geom_line(linewidth = 1) +  # Add lines
+  labs(title = "MNase-seq",
+       x = "Position from TSS",
+       y = "Nucleosome density",
+       color = "") +
+  geom_vline(xintercept = 800, linetype = "dotted", color = "black") +
+  theme_minimal() +  # Apply minimal theme 
+  scale_x_continuous(breaks = seq(0, 1600, by = 800), limits = c(0, 1600)) +
+  scale_y_continuous(breaks = seq(0, 12, by = 3), limits = c(0, 12)) +
+  scale_color_manual(values = c("WT" = "#D3D3D3", "hrp1" = "#0072B2", "hrp3" = "#CC79A7", "hrp1hrp3" = "#E69F00")) +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.major = element_blank(),  # Remove major gridlines
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# 9. Save the plot
+ggsave(p2, filename = output_file, height = 7.5, width = 10, units = "cm")
+
+# Completion message
+cat("Plot saved successfully to:", output_file, "\n")
+```
+
+
+```{r}
+# -----------------------------------------------
+# Figure 7F
+# -----------------------------------------------
+
+# Load required libraries
+library(tidyr)
+library(dplyr)
+library(pracma)
+library(ggplot2)
+
+# 1. Define input and output paths
+input_file <- "/path/to/prf1_mnase.tab"  # Replace with the actual path to your input file
+output_file <- "/path/to/output/plots/p3.pdf"          # Replace with the desired output file path
+
+# 2. Read the MNase-seq data
+MNaseseq <- read.table(input_file, header = TRUE, sep = "\t")
+
+# 3. Reshape the data to long format
+MNaseseq.long <- pivot_longer(
+  MNaseseq,
+  cols = everything(),
+  names_to = c("strain", "position"),
+  names_sep = "\\.",
+  values_to = "Signal"
+)
+
+# 4. Process the data
+MNaseseq.long$position <- as.numeric(MNaseseq.long$position) * 10  # Convert positions to numeric and scale
+MNaseseq.long$position[is.na(MNaseseq.long$position)] <- 0         # Replace NA positions with 0
+
+# 5. Calculate mean signal for each strain and position
+MNaseseq.means <- MNaseseq.long %>%
+  group_by(strain, position) %>%
+  summarise(MeanSignal = mean(Signal, na.rm = TRUE), .groups = 'drop')  # Calculate mean signal
+
+# 6. Set strain order for plotting
+MNaseseq.means$strain <- factor(MNaseseq.means$strain, levels = c("WT", "hrp1hrp3", "prf1", "hrp1hrp3prf1"))
+
+# 7. Find local maxima for WT
+local_maxima <- findpeaks(MNaseseq.means$MeanSignal[MNaseseq.means$strain == "WT"], npeaks = 11)
+WT.peak.positions <- MNaseseq.means$position[local_maxima[, 2]]
+print(WT.peak.positions)
+
+# 8. Create the plot
+p3 <- ggplot(MNaseseq.means, aes(x = position, y = MeanSignal, color = strain)) +
+  geom_ribbon(data = subset(MNaseseq.means, strain == "WT"), aes(ymin = 0, ymax = MeanSignal), fill = "#D3D3D3") +
+  geom_line(linewidth = 1) +  # Add lines
+  labs(title = "MNase-seq",
+       x = "Position from TSS",
+       y = "Nucleosome density",
+       color = "") +
+  geom_vline(xintercept = WT.peak.positions, linetype = "dotted", color = "black") +
+  theme_minimal() +  # Apply minimal theme 
+  scale_x_continuous(breaks = seq(0, 1600, by = 400), limits = c(0, 1600), position = "bottom") +
+  scale_y_continuous(breaks = seq(0, 15, by = 3), limits = c(0, 15)) +
+  scale_color_manual(values = c("WT" = "#D3D3D3", "hrp1hrp3" = "#0072B2", "prf1" = "#228B22", "hrp1hrp3prf1" = "#FFDE17")) +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.major = element_blank(),  # Remove major gridlines
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# 9. Save the plot
+ggsave(p3, filename = output_file, height = 7.5, width = 10, units = "cm")
+
+# Completion message
+cat("Plot saved successfully to:", output_file, "\n")
+```
+

@@ -1,0 +1,964 @@
+# -----------------------------------------------
+# Script for RNA-Seq Visualization (Figure 2A, 2B, S2B-D, S2E-F) & Meiosis Analysis (Figure 4A, 4B, 4E, 4F)
+# Author: [Jian Yi Kok]
+# Date: [2025-07-17]
+# Description: This script processes RNA-Seq data from CHD1 mutants
+# -----------------------------------------------
+
+```{r}
+# -----------------------------------------------
+# Figure 2A
+# -----------------------------------------------
+
+# Load required libraries
+library(DESeq2)
+library(readr)
+library(readxl)
+library(apeglm)
+library(ggplot2)
+library(tidyr)
+library(ggpointdensity)
+library(viridis)
+
+# Define input and output paths
+sample_info_file <- "/path/to/Figure_2.xlsx"  # Replace with actual path
+kallisto_dir <- "/path/to/kallisto_counts/"  # Replace with actual path
+output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
+
+# Read sample information
+sample_info <- read_excel(sample_info_file, sheet = "RNA_Seq")
+
+# Load Kallisto abundance data
+paired_kallisto_dirs <- list.dirs(kallisto_dir, recursive = FALSE)
+
+for (x in seq_along(paired_kallisto_dirs)) {
+  abundance_file <- file.path(paired_kallisto_dirs[x], "paired", "abundance.tsv")
+  abundance_tmp <- read_delim(abundance_file, "\t", escape_double = FALSE, trim_ws = TRUE)
+  sample_name <- basename(paired_kallisto_dirs[x])
+  colnames(abundance_tmp)[4] <- sample_name
+  abundance_tmp <- abundance_tmp[, c("target_id", sample_name)]
+  
+  if (x == 1) {
+    abundance <- abundance_tmp
+  } else {
+    abundance <- merge(abundance, abundance_tmp, by = "target_id")
+  }
+}
+
+# Prepare DESeq2 input
+row.names(abundance) <- abundance$target_id
+abundance$target_id <- NULL
+sample_table <- data.frame(
+  row.names = sample_info$`Forskalle Sample ID`,
+  genotype = sample_info$Name
+)
+
+dds <- DESeqDataSetFromMatrix(
+  countData = data.frame(lapply(abundance, as.integer), check.names = FALSE, row.names = row.names(abundance)),
+  colData = sample_table,
+  design = ~ genotype
+)
+
+# Apply VST normalization
+vst <- vst(dds)
+counts <- assay(vst)
+
+# Average normalized counts by genotype
+colnames(counts) <- sample_table$genotype
+nms <- unique(colnames(counts))
+ncounts.avg <- sapply(nms, function(x) rowMeans(counts[, colnames(counts) %in% x, drop = FALSE]))
+
+# Split into sense and antisense
+ncounts.avg.sense <- ncounts.avg[-grep("\\.rc", rownames(ncounts.avg)), ]
+ncounts.avg.antisense <- ncounts.avg[grep("\\.rc", rownames(ncounts.avg)), ]
+rownames(ncounts.avg.antisense) <- gsub("\\.rc", "", rownames(ncounts.avg.antisense))
+
+colnames(ncounts.avg.sense) <- paste0(colnames(ncounts.avg.sense), "_sense")
+colnames(ncounts.avg.antisense) <- paste0(colnames(ncounts.avg.antisense), "_antisense")
+
+# Merge sense and antisense data
+ncounts.avg.merged <- merge(
+  as.data.frame(ncounts.avg.sense),
+  as.data.frame(ncounts.avg.antisense),
+  by = "row.names",
+  all = TRUE
+)
+colnames(ncounts.avg.merged)[1] <- "Genes"
+
+# Remove unwanted rows
+ncounts.avg.merged <- ncounts.avg.merged[-grep("\\RNA", ncounts.avg.merged$Genes), ]
+```
+
+
+```{r}
+# -----------------------------------------------
+# Plotting Function
+# -----------------------------------------------
+
+# Function to create scatter plots
+create_scatter_plot <- function(data, x_col, y_col, x_label, y_label, x_lim, y_lim, output_file) {
+  plot <- ggplot(data, aes_string(x = x_col, y = y_col)) +
+    geom_pointdensity() +
+    scale_color_viridis() +
+    geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
+    labs(x = x_label, y = y_label, color = "Gene density") +
+    theme_minimal() +
+    xlim(x_lim) + ylim(y_lim) +
+    theme(text = element_text(size = 20))
+  
+  # Save the plot
+  ggsave(output_file, plot = plot, width = 6, height = 3.5)
+}
+
+# -----------------------------------------------
+# Generate Plots
+# -----------------------------------------------
+
+# Define strains and labels
+strains <- c("hrp1", "hrp3", "hrp1hrp3")
+y_labels_sense <- c("hrp1 Sense", "hrp3 Sense", "hrp1hrp3 Sense")
+y_labels_antisense <- c("hrp1 Antisense", "hrp3 Antisense", "hrp1hrp3 Antisense")
+
+# Generate sense plots
+for (i in seq_along(strains)) {
+  subset_data <- ncounts.avg.merged[, c("WT_sense", paste0(strains[i], "_sense"))]
+  colnames(subset_data) <- c("WT_sense", "Strain_sense")
+  output_file <- file.path(output_dir, paste0("p1_sense_", strains[i], ".tiff"))
+  create_scatter_plot(
+    data = subset_data,
+    x_col = "WT_sense",
+    y_col = "Strain_sense",
+    x_label = "WT Sense Transcription",
+    y_label = y_labels_sense[i],
+    x_lim = c(4, 18),
+    y_lim = c(4, 18),
+    output_file = output_file
+  )
+}
+
+# Generate antisense plots
+for (i in seq_along(strains)) {
+  subset_data <- ncounts.avg.merged[, c("WT_antisense", paste0(strains[i], "_antisense"))]
+  colnames(subset_data) <- c("WT_antisense", "Strain_antisense")
+  output_file <- file.path(output_dir, paste0("p1_antisense_", strains[i], ".tiff"))
+  create_scatter_plot(
+    data = subset_data,
+    x_col = "WT_antisense",
+    y_col = "Strain_antisense",
+    x_label = "WT Antisense Transcription",
+    y_label = y_labels_antisense[i],
+    x_lim = c(4, 10),
+    y_lim = c(4, 10),
+    output_file = output_file
+  )
+}
+
+# Completion message
+cat("Plots saved successfully to:", output_dir, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 2B
+# -----------------------------------------------
+
+# Load required libraries
+library(reshape2)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+
+# Filter and subset antisense data
+ncounts.avg.antisense <- ncounts.avg.antisense[-grep("\\RNA", rownames(ncounts.avg.antisense)), ]
+ncounts.avg.antisense <- ncounts.avg.antisense[, c(1:4)]  # Keep only the first 4 columns
+
+# Reshape the data to long format
+ncounts.avg.antisense.long <- melt(ncounts.avg.antisense, id.vars = "Gene", variable.name = "Mutant", value.name = "Value")
+colnames(ncounts.avg.antisense.long) <- c("Gene", "Mutant", "Value")
+
+# -----------------------------------------------
+# Statistical Analysis
+# -----------------------------------------------
+
+# Perform ANOVA
+anova_result <- aov(Value ~ Mutant, data = ncounts.avg.antisense.long)
+
+# Perform Tukey's HSD test
+tukey_result <- TukeyHSD(anova_result)
+
+# Extract pairwise comparisons for WT vs each mutant
+tukey_df <- as.data.frame(tukey_result$Mutant)
+tukey_df$Comparison <- rownames(tukey_df)
+tukey_df <- tukey_df[grep("WT_0_antisense", tukey_df$Comparison), ]  # Keep only comparisons with WT
+
+# Split the "Comparison" column into group1 and group2
+tukey_df <- tukey_df %>%
+  mutate(
+    group1 = sub("-.*", "", Comparison),  # Extract the first group
+    group2 = sub(".*-", "", Comparison)   # Extract the second group
+  )
+
+# Keep only the necessary columns
+tukey_df <- tukey_df[, c("group1", "group2", "p adj")]
+colnames(tukey_df) <- c("group1", "group2", "p_value")
+
+# Add significance levels
+tukey_df$Significance <- cut(
+  tukey_df$p_value,
+  breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+  labels = c("***", "**", "*", "ns")
+)
+
+# -----------------------------------------------
+# Plotting
+# -----------------------------------------------
+
+# Define colors for the plot
+colors <- c(
+  "WT_0_antisense" = "#D3D3D3",
+  "hrp1_0_antisense" = "#0072B2",
+  "hrp3_0_antisense" = "#CC79A7",
+  "hrp1hrp3_0_antisense" = "#E69F00"
+)
+
+# Create the boxplot with Tukey's HSD annotations
+p2 <- ggplot(ncounts.avg.antisense.long, aes(x = Mutant, y = Value, fill = Mutant)) +
+  geom_hline(
+    yintercept = median(ncounts.avg.antisense.long$Value[ncounts.avg.antisense.long$Mutant == "WT_0_antisense"], na.rm = TRUE), 
+    linetype = "dotted", color = "black"
+  ) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  labs(
+    title = "Boxplot of Each Mutant with Tukey's HSD",
+    x = "Mutant",
+    y = "Antisense Expression (Normalized Counts)"
+  ) +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    text = element_text(size = 15)
+  ) +
+  ylim(4, 9) +
+  stat_pvalue_manual(
+    tukey_df,
+    label = "Significance",
+    y.position = c(6.5, 6.7, 6.9),  # Place annotations slightly above the boxplots
+    step.increase = 0.05  # Minimal step increase to avoid overlap
+  )
+
+
+# Define output path
+output_file <- "/path/to/output/p2.pdf"  # Replace with your desired output path
+
+# Save the plot as a PDF
+ggsave(output_file, plot = p2, width = 5, height = 3.5)
+
+# Completion message
+cat("Plot saved successfully to:", output_file, "\n")
+
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S2B-D
+# -----------------------------------------------
+
+# Load required libraries
+library(DESeq2)
+library(dplyr)
+
+# Filter low-count genes
+keep <- rowSums(counts(dds)) >= 10
+dds.filtered <- dds[keep, ]
+
+# Relevel factors for genotype
+dds.filtered$genotype <- relevel(dds$genotype, ref = "WT_0")
+
+# Perform DESeq2 analysis
+dds.filtered <- DESeq(dds.filtered)
+
+# Extract results for relevant genotypes
+res.hrp1 <- results(dds.filtered, name = "genotype_hrp1_0_vs_WT_0")
+res.hrp3 <- results(dds.filtered, name = "genotype_hrp3_0_vs_WT_0")
+res.hrp1hrp3 <- results(dds.filtered, name = "genotype_hrp1.hrp3_0_vs_WT_0")
+
+# Apply LFC shrinkage
+res.hrp1.LFC <- lfcShrink(dds.filtered, coef = "genotype_hrp1_0_vs_WT_0", type = "apeglm")
+res.hrp3.LFC <- lfcShrink(dds.filtered, coef = "genotype_hrp3_0_vs_WT_0", type = "apeglm")
+res.hrp1hrp3.LFC <- lfcShrink(dds.filtered, coef = "genotype_hrp1.hrp3_0_vs_WT_0", type = "apeglm")
+
+# Convert results to data frames
+df.hrp1 <- as.data.frame(res.hrp1.LFC)
+df.hrp3 <- as.data.frame(res.hrp3.LFC)
+df.hrp1hrp3 <- as.data.frame(res.hrp1hrp3.LFC)
+
+# Add significance columns
+df.hrp1$Significant <- df.hrp1$padj < 0.05
+df.hrp3$Significant <- df.hrp3$padj < 0.05
+df.hrp1hrp3$Significant <- df.hrp1hrp3$padj < 0.05
+
+# Filter significant genes and extract log2 fold change
+df.hrp1.filtered <- data.frame(
+  gene.names = rownames(df.hrp1[df.hrp1$padj < 0.05, ]),
+  l2fc.hrp1 = df.hrp1[df.hrp1$padj < 0.05, "log2FoldChange"]
+)
+df.hrp1.filtered <- df.hrp1.filtered[!is.na(df.hrp1.filtered$l2fc.hrp1), ]
+
+df.hrp3.filtered <- data.frame(
+  gene.names = rownames(df.hrp3[df.hrp3$padj < 0.05, ]),
+  l2fc.hrp3 = df.hrp3[df.hrp3$padj < 0.05, "log2FoldChange"]
+)
+df.hrp3.filtered <- df.hrp3.filtered[!is.na(df.hrp3.filtered$l2fc.hrp3), ]
+
+df.hrp1hrp3.filtered <- data.frame(
+  gene.names = rownames(df.hrp1hrp3[df.hrp1hrp3$padj < 0.05, ]),
+  l2fc.hrp1hrp3 = df.hrp1hrp3[df.hrp1hrp3$padj < 0.05, "log2FoldChange"]
+)
+df.hrp1hrp3.filtered <- df.hrp1hrp3.filtered[!is.na(df.hrp1hrp3.filtered$l2fc.hrp1hrp3), ]
+
+# -----------------------------------------------
+# Merge Results
+# -----------------------------------------------
+
+# Combine LFC data for all strains
+l2fc.all.strains <- Reduce(function(x, y) merge(x, y, by = "gene.names", all = TRUE), 
+                           list(df.hrp1.filtered, df.hrp3.filtered, df.hrp1hrp3.filtered))
+
+# Replace NA values with 0
+l2fc.all.strains[is.na(l2fc.all.strains)] <- 0
+```
+
+```{r}
+# -----------------------------------------------
+# Plotting
+# -----------------------------------------------
+
+# Load required libraries
+library(ggplot2)
+library(ggpointdensity)
+library(viridis)
+
+# Subset for only genes (remove unwanted rows)
+l2fc.all.strains.merged <- l2fc.all.strains.merged[-grep("\\RNA", l2fc.all.strains.merged$Genes), ]
+
+# Define strains and corresponding y-axis labels
+strains <- c("hrp1", "hrp3", "hrp1hrp3")
+y_labels <- c("hrp1", "hrp3", "hrp1hrp3")
+
+# Create a list to store the ggplot objects
+plot_list <- list()
+
+# -----------------------------------------------
+# Generate Scatter Plots
+# -----------------------------------------------
+
+# Loop through the strains
+for (i in seq_along(strains)) {
+  # Subset the data for the current strain
+  sense_col <- paste0(strains[i], "_sense")
+  antisense_col <- paste0(strains[i], "_antisense")
+  
+  subset_data <- l2fc.all.strains.merged[, c(sense_col, antisense_col)]
+  colnames(subset_data) <- c("Sense", "Antisense")
+  
+  # Fit a linear model to get the regression coefficient and p-value
+  fit <- lm(Antisense ~ Sense, data = subset_data)
+  summary_fit <- summary(fit)
+  coef <- summary_fit$coefficients[2, 1]  # Extract the regression coefficient (slope)
+  p_value <- summary_fit$coefficients[2, 4]  # Extract the p-value for the slope
+  
+  # Create the ggplot object for the current strain
+  plot <- ggplot(subset_data, aes(x = Sense, y = Antisense)) +
+    geom_pointdensity() +
+    geom_vline(xintercept = 0, linetype = "dotted", color = "black") +
+    geom_hline(yintercept = 0, linetype = "dotted", color = "black") +
+    scale_color_viridis() +
+    xlim(-5, 5) + ylim(-2, 8) +
+    labs(
+      x = "log2FC [sense]",
+      y = "log2FC [antisense]",
+      title = y_labels[i],
+      color = "Gene density",
+      caption = paste("Slope: ", round(coef, 3), " | p-value: ", signif(p_value, digits = 3))  # Add slope and p-value as caption
+    ) +
+    theme_minimal() +
+    theme(
+      text = element_text(size = 20),
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, colour = "black", size = 1)
+    )
+  
+  # Store the ggplot object in the list
+  plot_list[[i]] <- plot
+}
+
+# -----------------------------------------------
+# Save Plots
+# -----------------------------------------------
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with your desired output directory
+
+# Save each plot as a TIFF file
+for (i in seq_along(plot_list)) {
+  output_file <- file.path(output_dir, paste0("scatter_", strains[i], ".tiff"))
+  ggsave(output_file, plot = plot_list[[i]], width = 6, height = 3.5)
+}
+
+# Completion message
+cat("Plots saved successfully to:", output_dir, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S2E-F
+# -----------------------------------------------
+
+# Load required libraries
+library(ggplot2)
+
+# Subset the data for WT_0 and hrp1hrp3_0
+subset_data <- ncounts.avg.merged[, c("Genes", "WT_0_sense", "WT_0_antisense", "hrp1hrp3_0_sense", "hrp1hrp3_0_antisense")]
+
+# -----------------------------------------------
+# Correlation Analysis
+# -----------------------------------------------
+
+# Calculate correlation and p-value for WT_0
+cor_test_wt <- cor.test(subset_data$WT_0_sense, subset_data$WT_0_antisense, use = "complete.obs")
+cor_wt <- cor_test_wt$estimate  # Correlation coefficient
+p_value_wt <- cor_test_wt$p.value  # P-value
+
+# Calculate correlation and p-value for hrp1hrp3_0
+cor_test_hrp1hrp3 <- cor.test(subset_data$hrp1hrp3_0_sense, subset_data$hrp1hrp3_0_antisense, use = "complete.obs")
+cor_hrp1hrp3 <- cor_test_hrp1hrp3$estimate  # Correlation coefficient
+p_value_hrp1hrp3 <- cor_test_hrp1hrp3$p.value  # P-value
+
+# -----------------------------------------------
+# Plotting
+# -----------------------------------------------
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with your desired output directory
+
+# WT_0 scatter plot
+plot_wt <- ggplot(subset_data, aes(x = WT_0_sense, y = WT_0_antisense)) +
+  geom_point(alpha = 1, size = 0.5, color = "#D3D3D3") +
+  geom_smooth(method = "lm", color = "black", linetype = "dashed", se = FALSE) +
+  labs(
+    title = "Correlation Between Sense and Antisense Counts (WT_0)",
+    x = "Sense Counts (WT_0)",
+    y = "Antisense Counts (WT_0)"
+  ) +
+  xlim(4, 18) + ylim(4, 10) +
+  annotate(
+    "text",
+    x = max(subset_data$WT_0_sense, na.rm = TRUE) * 0.8, 
+    y = max(subset_data$WT_0_antisense, na.rm = TRUE) * 0.8, 
+    label = paste0("r = ", round(cor_wt, 2)), size = 5, color = "black"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1)  # Add border
+  )
+
+# hrp1hrp3_0 scatter plot
+plot_hrp1hrp3 <- ggplot(subset_data, aes(x = hrp1hrp3_0_sense, y = hrp1hrp3_0_antisense)) +
+  geom_point(alpha = 1, size = 0.5, color = "#E5A024") +
+  geom_smooth(method = "lm", color = "black", linetype = "dashed", se = FALSE) +
+  labs(
+    title = "Correlation Between Sense and Antisense Counts (hrp1hrp3_0)",
+    x = "Sense Counts (hrp1hrp3_0)",
+    y = "Antisense Counts (hrp1hrp3_0)"
+  ) +
+  xlim(4, 18) + ylim(4, 10) +
+  annotate(
+    "text",
+    x = max(subset_data$hrp1hrp3_0_sense, na.rm = TRUE) * 0.8, 
+    y = max(subset_data$hrp1hrp3_0_antisense, na.rm = TRUE) * 0.8, 
+    label = paste0("r = ", round(cor_hrp1hrp3, 2)), size = 5, color = "black"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(fill = NA, colour = "black", size = 1)  # Add border
+  )
+
+# -----------------------------------------------
+# Save Plots
+# -----------------------------------------------
+
+# Save WT_0 plot
+output_file_wt <- file.path(output_dir, "scatter_wt_0.pdf")
+ggsave(output_file_wt, plot = plot_wt, height = 3.5, width = 3.5, units = "in")
+
+# Save hrp1hrp3_0 plot
+output_file_hrp1hrp3 <- file.path(output_dir, "scatter_hrp1hrp3_0.pdf")
+ggsave(output_file_hrp1hrp3, plot = plot_hrp1hrp3, height = 3.5, width = 3.5, units = "in")
+
+# Completion message
+cat("Plots saved successfully to:", output_dir, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 4A
+# -----------------------------------------------
+
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+
+# Define input files
+SR_file <- "/path/to/sexualreproductionlist.tsv"  # Replace with the actual path
+em_file <- "/path/to/earlymeiotic.txt"  # Replace with the actual path
+mm_file <- "/path/to/middlemeiotic.txt"  # Replace with the actual path
+lm_file <- "/path/to/latemeiotic.txt"  # Replace with the actual path
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with the desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define output file for the plot
+output_plot <- file.path(output_dir, "p3.pdf")
+
+# Convert DESeq2 results to a tibble
+res_tib <- as_tibble(res.hrp3, rownames = "gene_id")
+
+# Filter for protein-coding genes (pcg) and significant genes (padj < 0.1, abs(log2FoldChange) > 1)
+pcg_sig <- res_tib %>%
+  dplyr::filter(padj < 0.1, abs(log2FoldChange) > 1)
+
+# Load gene lists
+SRlist <- readLines(SR_file)
+em_list <- readLines(em_file)
+mm_list <- readLines(mm_file)
+lm_list <- readLines(lm_file)
+
+# Combine all lists into a named list
+gene_lists <- list(
+  SR = SRlist,
+  early_meiotic = em_list,
+  middle_meiotic = mm_list,
+  late_meiotic = lm_list
+)
+
+# Extract upregulated genes (log2FoldChange > 1)
+pcg_sig_up <- pcg_sig %>%
+  dplyr::filter(log2FoldChange > 1) %>%
+  dplyr::pull(gene_id)  # Extract the gene IDs
+
+# Define the universe of genes (e.g., all genes in your dataset)
+gene_universe <- res_tib %>%
+  dplyr::pull(gene_id)
+
+# -----------------------------------------------
+# Functions
+# -----------------------------------------------
+
+# Function to perform Fisher's exact test and calculate observed/expected counts
+perform_fisher_test <- function(gene_list, universe, upregulated_genes) {
+  # Calculate overlap and other counts
+  overlap <- length(intersect(upregulated_genes, gene_list))
+  in_list_not_upregulated <- length(setdiff(gene_list, upregulated_genes))
+  upregulated_not_in_list <- length(setdiff(upregulated_genes, gene_list))
+  not_in_list_not_upregulated <- length(setdiff(universe, union(gene_list, upregulated_genes)))
+  
+  # Create a contingency table
+  contingency_table <- matrix(c(overlap, in_list_not_upregulated, 
+                                upregulated_not_in_list, not_in_list_not_upregulated),
+                              nrow = 2, byrow = TRUE)
+  
+  # Perform Fisher's exact test
+  fisher_result <- fisher.test(contingency_table)
+  
+  # Add observed and expected counts to the result
+  fisher_result$observed <- overlap
+  fisher_result$expected <- length(gene_list)
+  
+  return(fisher_result)
+}
+
+# Perform Fisher's test for each list
+enrichment_results <- lapply(gene_lists, function(gene_list) {
+  perform_fisher_test(gene_list, gene_universe, pcg_sig_up)
+})
+
+# Extract results into a data frame
+enrichment_df <- data.frame(
+  GeneSet = names(enrichment_results),
+  OddsRatio = sapply(enrichment_results, function(x) x$estimate["odds ratio"]),  # Extract odds ratio
+  PValue = sapply(enrichment_results, function(x) x$p.value),                   # Extract p-value
+  EnrichedCount = sapply(enrichment_results, function(x) x$observed),           # Number of enriched genes
+  TotalGenes = sapply(enrichment_results, function(x) x$expected)               # Total genes in the gene set
+)
+
+# Add proportion and format p-values
+enrichment_df <- enrichment_df %>%
+  dplyr::mutate(
+    Proportion = EnrichedCount / TotalGenes,  # Proportion of enriched genes
+    PValueLabel = sprintf("p = %.3g", PValue)  # Format p-value for display
+  )
+
+# Plot the odds ratio with p-value captions and enriched counts
+p3 <- ggplot(enrichment_df, aes(x = reorder(GeneSet, -OddsRatio), y = OddsRatio)) +  # Reverse order with -OddsRatio
+  geom_bar(stat = "identity", fill = "gray", color = "black", size = 1) +  # Add border with size 1
+  geom_text(aes(label = PValueLabel), hjust = -0.1, size = 4) +  # Add p-value as text
+  coord_flip() +  # Flip the axes for better readability
+  labs(
+    title = "Fisher's Test Enrichment Results",
+    x = "Gene Set",
+    y = "Odds Ratio"
+  ) +
+  ylim(0, 13) +  # Adjust y-axis limits
+  theme_minimal(base_size = 14) +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save the plot
+ggsave(output_plot, plot = p3, width = 3.5, height = 3.5)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Enrichment analysis completed. Plot saved to:", output_plot, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 4B
+# -----------------------------------------------
+
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+
+# Define input files
+res_file <- "/path/to/res_tib.csv"  # Replace with the actual path to your results file
+mata_list_files <- list(
+  early_meiotic = "/path/to/earlymeiotic.txt",  # Replace with the actual path
+  middle_meiotic = "/path/to/middlemeiotic.txt",  # Replace with the actual path
+  late_meiotic = "/path/to/latemeiotic.txt"  # Replace with the actual path
+)
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with the desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define output file for the plot
+output_plot <- file.path(output_dir, "p4.pdf")
+
+# Load the results table
+res_tib <- read.csv(res_file)
+
+# Load and combine `mata_list` from multiple files
+mata_list <- lapply(mata_list_files, readLines)  # Read each file into a list
+mata_genes <- unlist(mata_list)  # Combine all lists into a single vector
+
+# -----------------------------------------------
+# Volcano Plot Function
+# -----------------------------------------------
+
+volcano_plot <- function(res_tib, mata_genes, title = "", pthres = 0.1, fc = 1) {
+  res_tib %>%
+    dplyr::filter(isAS == FALSE) %>%  # Exclude antisense genes
+    dplyr::mutate(
+      significance = case_when(
+        padj < pthres & abs(log2FoldChange) > fc & gene_id %in% mata_genes ~ "In mata_list",
+        padj < pthres & abs(log2FoldChange) > fc & !(gene_id %in% mata_genes) ~ "Significant",
+        TRUE ~ "Not Significant"
+      )
+    ) %>%
+    ggplot(aes(x = log2FoldChange, y = -log10(padj), color = significance)) +
+    geom_point(alpha = 0.8, size = 1.5, stroke = 0) +
+    geom_vline(xintercept = c(-fc, fc), linetype = "dashed", color = "black", linewidth = 0.5, alpha = 0.5) +  # Add vertical lines
+    geom_hline(yintercept = -log10(pthres), linetype = "dashed", color = "black", linewidth = 0.5, alpha = 0.5) +  # Add horizontal line
+    scale_color_manual(
+      values = c("Not Significant" = "lightgrey", "In mata_list" = "red", "Significant" = "black")
+    ) +
+    xlim(-4, 4) + ylim(0, 80) +
+    labs(
+      title = title,
+      x = "Log2 Fold Change",
+      y = "-Log10 Adjusted P-Value",
+      color = "Gene Status"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      text = element_text(size = 15), 
+      plot.title = element_text(hjust = 0.5), 
+      legend.position = "none", 
+      panel.border = element_rect(color = "black", fill = NA, size = 1), 
+      panel.grid.minor = element_blank(),
+      axis.ticks = element_line(color = "black", linewidth = 0.5),
+      axis.ticks.length = unit(0.2, "cm"),
+      axis.text.y = element_text(angle = 90, hjust = 0.5)
+    )
+}
+
+# -----------------------------------------------
+# Generate and Save Volcano Plot
+# -----------------------------------------------
+
+# Generate the volcano plot
+p4 <- volcano_plot(res_tib, mata_genes, title = "Genotype hrp3", pthres = 0.1, fc = 1)
+
+# Save the plot
+ggsave(output_plot, plot = p4, width = 2.7, height = 3)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Volcano plot saved to:", output_plot, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 4F
+# -----------------------------------------------
+
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+
+# Define input files
+res_file <- "/path/to/res_tib.csv"  # Replace with the actual path to your results file
+nested_genes_file <- "/path/to/nested_genes.csv"  # Replace with the actual path
+mata_list_files <- list(
+  early_meiotic = "/path/to/earlymeiotic.txt",  # Replace with the actual path
+  middle_meiotic = "/path/to/middlemeiotic.txt",  # Replace with the actual path
+  late_meiotic = "/path/to/latemeiotic.txt"  # Replace with the actual path
+)
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with the desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define output file for the plot
+output_plot <- file.path(output_dir, "volcano_plot_nested_mata.png")
+
+# Load the results table
+res_tib <- read.csv(res_file)
+
+# Load nested genes
+nested_genes_df <- read.csv(nested_genes_file)
+
+# Load and combine `mata_list` from multiple files
+mata_list <- lapply(mata_list_files, readLines)  # Read each file into a list
+mata_genes <- unlist(mata_list)  # Combine all lists into a single vector
+
+# -----------------------------------------------
+# Volcano Plot Function
+# -----------------------------------------------
+
+volcano_plot <- function(res_tib, nested_genes, mata_list, title = "", pthres = 0.1, fc = 1) {
+  res_tib %>%
+    dplyr::filter(isAS == FALSE) %>%  # Exclude antisense genes
+    dplyr::mutate(
+      significance = case_when(
+        padj < pthres & abs(log2FoldChange) > fc & gene_id %in% nested_genes & gene_id %in% mata_list ~ "In Both Lists",
+        padj < pthres & abs(log2FoldChange) > fc & gene_id %in% nested_genes ~ "Nested Genes",
+        padj < pthres & abs(log2FoldChange) > fc & gene_id %in% mata_list ~ "Mata List",
+        padj < pthres & abs(log2FoldChange) > fc ~ "Significant",
+        TRUE ~ "Not Significant"
+      )
+    ) %>%
+    ggplot(aes(x = log2FoldChange, y = -log10(padj), color = significance)) +
+    geom_point(alpha = 0.8, size = 1.5, stroke = 0) +
+    geom_vline(xintercept = c(-fc, fc), linetype = "dashed", color = "black", linewidth = 0.5, alpha = 0.5) +  # Add vertical lines
+    geom_hline(yintercept = -log10(pthres), linetype = "dashed", color = "black", linewidth = 0.5, alpha = 0.5) +  # Add horizontal line
+    scale_color_manual(
+      values = c(
+        "Not Significant" = "lightgrey", 
+        "In Both Lists" = "#E1A500", 
+        "Nested Genes" = "#3399CC", 
+        "Mata List" = "black", 
+        "Significant" = "black"
+      )
+    ) +
+    xlim(-4, 4) + ylim(0, 80) +
+    labs(
+      title = title,
+      x = "Log2 Fold Change",
+      y = "-Log10 Adjusted P-Value",
+      color = "Gene Status"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      text = element_text(size = 15), 
+      plot.title = element_text(hjust = 0.5), 
+      legend.position = "none", 
+      panel.border = element_rect(color = "black", fill = NA, size = 1), 
+      panel.grid.minor = element_blank(),
+      axis.ticks = element_line(color = "black", linewidth = 0.5),
+      axis.ticks.length = unit(0.2, "cm"),
+      axis.text.y = element_text(angle = 90, hjust = 0.5)
+    )
+}
+
+# -----------------------------------------------
+# Generate and Save Volcano Plot
+# -----------------------------------------------
+
+# Generate the volcano plot
+p5 <- volcano_plot(
+  res_tib = res_tib, 
+  nested_genes = nested_genes_df$nested_gene,  # Replace with the column containing nested genes
+  mata_list = mata_genes,  # Replace with the combined mata list
+  title = "Genotype hrp3", 
+  pthres = 0.1, 
+  fc = 1
+)
+
+# Save the plot
+ggsave(output_plot, plot = p5, width = 2.7, height = 3)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Volcano plot saved to:", output_plot, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure 4E
+# -----------------------------------------------
+
+# Load required libraries
+library(ComplexHeatmap)
+
+# Define input files
+nested_genes_file <- "/path/to/nested_genes.csv"  # Replace with the actual path
+mata_list_files <- list(
+  early_meiotic = "/path/to/earlymeiotic.txt",  # Replace with the actual path
+  middle_meiotic = "/path/to/middlemeiotic.txt",  # Replace with the actual path
+  late_meiotic = "/path/to/latemeiotic.txt"  # Replace with the actual path
+)
+pcg_sig_up_file <- "/path/to/pcg_sig_up.csv"  # Replace with the actual path
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with the desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define output file for the UpSet plot
+output_plot <- file.path(output_dir, "upset_plot.pdf")
+
+# Load nested genes
+nested_genes_df <- read.csv(nested_genes_file)
+
+# Load and combine `mata_list` from multiple files
+mata_list <- lapply(mata_list_files, readLines)  # Read each file into a list
+mata_genes <- unlist(mata_list)  # Combine all lists into a single vector
+
+# Load PCG significant upregulated genes
+pcg_sig_up <- read.csv(pcg_sig_up_file)$gene_id  # Replace `gene_id` with the correct column name
+
+# Create a list of gene sets
+gene_sets <- list(
+  NestedGenes = nested_genes_df$nested_gene,  # Replace with the column containing nested genes
+  MataList = mata_genes,
+  PCG_Sig_Up = pcg_sig_up
+)
+
+# Total number of genes in the universe
+gene_universe_size <- length(unique(unlist(gene_sets)))
+
+# -----------------------------------------------
+# Statistical Analysis
+# -----------------------------------------------
+
+# Function to calculate hypergeometric p-value
+calculate_pvalue <- function(overlap_size, set1_size, set2_size, universe_size) {
+  phyper(
+    q = overlap_size - 1,  # Overlap size minus 1
+    m = set1_size,         # Size of the first set
+    n = universe_size - set1_size,  # Size of the rest of the universe
+    k = set2_size,         # Size of the second set
+    lower.tail = FALSE     # Test for enrichment
+  )
+}
+
+# Calculate pairwise overlaps and p-values
+overlap_nested_mata <- length(intersect(gene_sets$NestedGenes, gene_sets$MataList))
+p_value_nested_mata <- calculate_pvalue(
+  overlap_size = overlap_nested_mata,
+  set1_size = length(gene_sets$NestedGenes),
+  set2_size = length(gene_sets$MataList),
+  universe_size = gene_universe_size
+)
+
+overlap_nested_pcg <- length(intersect(gene_sets$NestedGenes, gene_sets$PCG_Sig_Up))
+p_value_nested_pcg <- calculate_pvalue(
+  overlap_size = overlap_nested_pcg,
+  set1_size = length(gene_sets$NestedGenes),
+  set2_size = length(gene_sets$PCG_Sig_Up),
+  universe_size = gene_universe_size
+)
+
+overlap_mata_pcg <- length(intersect(gene_sets$MataList, gene_sets$PCG_Sig_Up))
+p_value_mata_pcg <- calculate_pvalue(
+  overlap_size = overlap_mata_pcg,
+  set1_size = length(gene_sets$MataList),
+  set2_size = length(gene_sets$PCG_Sig_Up),
+  universe_size = gene_universe_size
+)
+
+# Three-way overlap
+overlap_all <- length(Reduce(intersect, gene_sets))
+p_value_three_way <- calculate_pvalue(
+  overlap_size = overlap_all,
+  set1_size = length(gene_sets$NestedGenes),
+  set2_size = length(intersect(gene_sets$MataList, gene_sets$PCG_Sig_Up)),
+  universe_size = gene_universe_size
+)
+
+# Print p-values
+cat("P-values:\n")
+cat("NestedGenes and MataList:", p_value_nested_mata, "\n")
+cat("NestedGenes and PCG_Sig_Up:", p_value_nested_pcg, "\n")
+cat("MataList and PCG_Sig_Up:", p_value_mata_pcg, "\n")
+cat("Three-way overlap:", p_value_three_way, "\n")
+
+# -----------------------------------------------
+# Generate UpSet Plot
+# -----------------------------------------------
+
+# Create the combination matrix
+comb_mat <- make_comb_mat(gene_sets, mode = "intersect")
+
+# Open a PDF device
+pdf(file = output_plot, width = 10, height = 8)
+
+# Generate the UpSet plot
+UpSet(
+  comb_mat, 
+  pt_size = unit(10, "mm"),  # Point size for intersections
+  top_annotation = upset_top_annotation(comb_mat, add_numbers = TRUE),  # Top bar chart
+  right_annotation = upset_right_annotation(comb_mat, add_numbers = TRUE)  # Right bar chart
+)
+
+# Close the PDF device
+dev.off()
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("UpSet plot saved to:", output_plot, "\n")
+```
+

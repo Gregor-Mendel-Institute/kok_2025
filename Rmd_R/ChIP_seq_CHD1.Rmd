@@ -1,0 +1,318 @@
+# -----------------------------------------------
+# Script for Generating Metaplots by Expression Quartiles (Figure 7B, S10A) and furthur analysis (Figure S10B, S10E)
+# Author: [Jian Yi Kok]
+# Date: [2025-07-17]
+# Description: This script processes scaled signal data and generates metaplots.
+# -----------------------------------------------
+
+```{r}
+# -----------------------------------------------
+# Figure 7B, S10A
+# -----------------------------------------------
+
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Define input files
+input_files <- list(
+  hrp1 = "/path/to/Quartile_hrp1_scaled.tab",  # Replace with actual path
+  hrp3 = "/path/to/Quartile_hrp3_scaled.tab",  # Replace with actual path
+  H2Bub = "/path/to/Quartile_H2Bub_scaled.tab" # Replace with actual path
+)
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define color schemes for quartiles
+quartile_colors <- list(
+  hrp1 = c("Q1" = "#D6EAF8", "Q2" = "#7FB3D5", "Q3" = "#2874A6", "Q4" = "#004080"),
+  hrp3 = c("Q1" = "#F4D6E4", "Q2" = "#E8AFC8", "Q3" = "#D184A9", "Q4" = "#A03F6E"),
+  H2Bub = c("Q1" = "#C8F8F4", "Q2" = "#8DEDE4", "Q3" = "#4AD9CC", "Q4" = "#1A9F96")
+)
+
+# -----------------------------------------------
+# Functions
+# -----------------------------------------------
+
+# Function to process data and generate metaplot
+generate_metaplot <- function(input_file, signal_prefix, output_file, colors) {
+  # Read the input file
+  data <- read.table(input_file, header = TRUE, sep = "\t", skip = 2)
+  
+  # Add quartile information
+  num_genes <- nrow(data)
+  data$Quartile <- cut(1:num_genes, breaks = 4, labels = c("Q1", "Q2", "Q3", "Q4"))
+  
+  # Reshape the data into long format
+  data_long <- data %>%
+    pivot_longer(
+      cols = starts_with(signal_prefix),
+      names_to = "Position",
+      values_to = "Signal"
+    )
+  
+  # Extract numeric positions and calculate bins
+  data_long <- data_long %>%
+    mutate(
+      Position = as.numeric(gsub(paste0(signal_prefix, "\\."), "", Position)),
+      Bin = case_when(
+        Position <= 5 ~ Position - 6,  # 500 bp upstream (-500 to -1)
+        Position >= 6 & Position <= 15 ~ Position - 5,  # Scaled region (TSS to TES, 1 to 10)
+        Position >= 16 ~ Position - 15  # 500 bp downstream (+1 to +500)
+      )
+    )
+  
+  # Aggregate signal by quartile and bin
+  metaplot_data <- data_long %>%
+    group_by(Quartile, Bin) %>%
+    summarize(
+      Mean_Signal = mean(Signal, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  # Generate the metaplot
+  plot <- ggplot(metaplot_data, aes(x = Bin, y = Mean_Signal, color = Quartile)) +
+    geom_line(size = 1) +
+    scale_x_continuous(
+      breaks = c(-5, 0, 10, 15),  # Adjust based on bin structure
+      labels = c("-500bp", "TSS", "TES", "+500bp")
+    ) +
+    scale_color_manual(values = colors) +
+    labs(
+      title = paste("Metaplot of", signal_prefix, "Signal Across Gene Regions"),
+      x = "Position Relative to Gene",
+      y = "Mean Signal",
+      color = "Quartile"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      text = element_text(size = 15),
+      plot.title = element_text(hjust = 0.5),
+      legend.position = "none",
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.ticks = element_line(color = "black", linewidth = 0.5),
+      axis.ticks.length = unit(0.4, "cm"),
+      axis.text.y = element_text(angle = 90, hjust = 0.5)
+    )
+  
+  # Save the plot
+  ggsave(plot, filename = output_file, height = 7.5, width = 10, units = "cm")
+}
+
+# -----------------------------------------------
+# Main Script
+# -----------------------------------------------
+
+# Generate metaplots for hrp1, hrp3, and H2Bub
+generate_metaplot(
+  input_file = input_files$hrp1,
+  signal_prefix = "hrp1",
+  output_file = file.path(output_dir, "p1_hrp1_metaplot.pdf"),
+  colors = quartile_colors$hrp1
+)
+
+generate_metaplot(
+  input_file = input_files$hrp3,
+  signal_prefix = "hrp3",
+  output_file = file.path(output_dir, "p2_hrp3_metaplot.pdf"),
+  colors = quartile_colors$hrp3
+)
+
+generate_metaplot(
+  input_file = input_files$H2Bub,
+  signal_prefix = "H2Bub",
+  output_file = file.path(output_dir, "p3_H2Bub_metaplot.pdf"),
+  colors = quartile_colors$H2Bub
+)
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Metaplot generation completed. Plots saved to:", output_dir, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S10E
+# -----------------------------------------------
+
+# Load required libraries
+library(tidyverse)
+
+# Define input files
+expression_file <- "/path/to/mean_tpm.txt"  # Replace with the actual path to WT tpm data
+compute_matrix_file <- "/path/to/H2Bub.mat"  # Replace with the actual path to H2B ChIP-seq data
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with the desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define output file for the plot
+output_plot <- file.path(output_dir, "p4.tiff")
+
+# Load the expression data
+expression_data <- read.table(expression_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+# Extract T0 expression for WT and hrp1hrp3
+expression_data <- expression_data %>%
+  dplyr::select(gene_id, T0_WT, T0_hrp1hrp3) 
+
+# Convert expression data to long format
+expression_data_long <- expression_data %>%
+  pivot_longer(cols = c(WT, hrp1hrp3), 
+               names_to = "Condition", 
+               values_to = "Expression")
+
+# Rename the gene_id column to match the Gene column in compute_matrix_long
+colnames(expression_data_long)[1] <- "Gene"
+
+# Load computeMatrix output
+compute_matrix <- read.table(compute_matrix_file, header = FALSE, sep = "\t", stringsAsFactors = FALSE, skip = 1)
+colnames(compute_matrix) <- c("Chromosome", "Start", "End", "Gene", "Score", "Strand", 
+                              paste0("WT_", 1:100), paste0("hrp1_", 1:100), 
+                              paste0("hrp3_", 1:100), paste0("hrp1hrp3_", 1:100))
+
+# Calculate average H2Bub signal for each gene and condition
+compute_matrix_long <- compute_matrix %>%
+  pivot_longer(cols = starts_with("WT_"):starts_with("hrp1hrp3_"), 
+               names_to = c("Condition", "Bin"), 
+               names_sep = "_", 
+               values_to = "Signal") %>%
+  group_by(Gene, Condition) %>%
+  summarize(AverageSignal = mean(Signal, na.rm = TRUE), .groups = "drop")
+
+# Force the order of the Condition variable
+compute_matrix_long$Condition <- factor(compute_matrix_long$Condition, levels = c("WT", "hrp1", "hrp3", "hrp1hrp3"))
+
+# Merge the expression data with compute_matrix_long
+compute_matrix_long <- compute_matrix_long %>%
+  inner_join(expression_data_long, by = c("Gene", "Condition"))
+
+# Filter for WT and hrp1hrp3 conditions only
+filtered_data <- compute_matrix_long %>%
+  filter(Condition %in% c("WT", "hrp1hrp3"))
+
+# Add expression quartile information and make it categorical
+filtered_data <- filtered_data %>%
+  mutate(
+    ExpressionQuartile = ntile(Expression, 4),  # Divide Expression into 4 quartiles
+    ExpressionQuartile = factor(ExpressionQuartile, 
+                                 levels = c(1, 2, 3, 4), 
+                                 labels = c("Q1", "Q2", "Q3", "Q4"))  # Make it categorical
+  )
+
+# Calculate signal loss (hrp1hrp3 - WT)
+signal_loss_data <- filtered_data %>%
+  pivot_wider(names_from = Condition, values_from = AverageSignal) %>%
+  mutate(SignalLoss = hrp1hrp3 - WT)
+
+# Create the scatterplot with R and p values
+p4 <- ggplot(signal_loss_data, aes(x = Expression, y = SignalLoss, color = ExpressionQuartile)) +
+  geom_hline(yintercept = 0, linetype = "dotted") + 
+  geom_point(alpha = 0.6, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", color = "darkred", size = 1) +
+  scale_color_brewer(palette = "Set2", name = "Expression Quartile") +
+  labs(
+    title = "Loss of H2Bub Signal (hrp1hrp3 vs WT) vs Gene Expression (T0)",
+    x = "Gene Expression (T0, TPM)",
+    y = "Loss of H2Bub Signal (hrp1hrp3 - WT)"
+  ) +
+  theme_minimal() + 
+  scale_x_log10() +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.major = element_blank(),  # Remove major gridlines
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save the plot
+ggsave(p4, filename = output_plot, height = 7.5, width = 10, units = "cm")
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Scatterplot saved to:", output_plot, "\n")
+```
+
+```{r}
+# -----------------------------------------------
+# Figure S10B
+# -----------------------------------------------
+
+# Load required libraries
+library(ggplot2)
+library(ggpubr)
+
+# Define input files
+tes_file <- "/path/to/hrp1_tts_500bp_signal.txt"  # Replace with the actual path to file with Hrp1 ChIP-seq signal (TES-centered)
+tss_file <- "/path/to/hrp3_tss_to_tts_signal.txt"  # Replace with the actual path to file with Hrp3 ChIP-seq signal (TSS to TES)
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with the desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define output file for the plot
+output_plot <- file.path(output_dir, "p5.tiff")
+
+# Load the TES-centered signal data
+tes_data <- read.table(tes_file, header = TRUE, sep = "\t")
+
+# Load the TSS-to-TES signal data
+tss_data <- read.table(tss_file, header = TRUE, sep = "\t")
+
+# Merge the two datasets on the "name" column
+merged_data <- merge(tes_data, tss_data, by = "name", suffixes = c("_tes", "_tss"))
+
+# Calculate Pearson correlation and p-value
+cor_test <- cor.test(merged_data$mean_signal_tes, merged_data$mean_signal_tss, method = "pearson")
+r_value <- cor_test$estimate
+p_value <- cor_test$p.value
+
+# Print the correlation results
+cat("Pearson Correlation (r):", r_value, "\n")
+cat("P-value:", p_value, "\n")
+
+# Scatter plot with regression line
+p5 <- ggplot(merged_data, aes(x = mean_signal_tes, y = mean_signal_tss)) +
+  geom_point(alpha = 0.6, color = "gray50") +  # Grayscale points
+  geom_smooth(method = "lm", color = "black", linetype = "dotted", se = FALSE) +  # Dotted black regression line
+  labs(
+    x = "Hrp1 Enrichment (TTS)",
+    y = "Hrp3 Enrichment (Gene Body)",
+    title = "Correlation Between Hrp1 and Hrp3 Enrichment over Genes"
+  ) +
+  xlim(-2, 3) + ylim(-2, 4) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(hjust = 0.5)
+  )
+
+# Save the plot
+ggsave(p5, filename = output_plot, height = 10, width = 13, units = "cm")
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Scatterplot saved to:", output_plot, "\n")
+```
+

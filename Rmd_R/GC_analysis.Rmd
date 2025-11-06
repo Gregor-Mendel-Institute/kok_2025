@@ -1,0 +1,163 @@
+# -----------------------------------------------
+# Script for Analyzing GC Content Around Nucleosome Dyads (Figure S4B)
+# Author: [Jian Yi Kok]
+# Date: [2025-07-17]
+# Description: This script compares GC content distributions between WT and hrp1hrp3
+#              using a Kolmogorov-Smirnov test and generates histograms with density plots.
+# -----------------------------------------------
+
+```{r}
+# -----------------------------------------------
+# Figure S4B
+# -----------------------------------------------
+
+# Load required libraries
+library(ggplot2)
+library(readxl)  # For reading DANPOS .xls files
+library(Biostrings)  # For working with genomic sequences
+library(GenomicRanges)  # For handling genomic regions
+
+# Define input files
+danpos_file_WT <- "/path/to/danpos_output_WT.xls"  # Replace with the actual path
+danpos_file_hrp1hrp3 <- "/path/to/danpos_output_hrp1hrp3.xls"  # Replace with the actual path
+reference_genome <- "/path/to/reference_genome.fa"  # Replace with the path to the FASTA file
+
+# Define output directory
+output_dir <- "/path/to/output/plots/"  # Replace with the desired output directory
+dir.create(output_dir, showWarnings = FALSE)
+
+# Define output files for the plots
+output_plot_WT <- file.path(output_dir, "p1_GC_Content_WT.pdf")
+output_plot_hrp1hrp3 <- file.path(output_dir, "p2_GC_Content_hrp1hrp3.pdf")
+
+# -----------------------------------------------
+# Functions
+# -----------------------------------------------
+
+# Function to calculate GC content for genomic regions
+calculate_gc_content <- function(danpos_file, genome) {
+  # Read the DANPOS file
+  danpos_data <- read_excel(danpos_file, sheet = 1)
+  
+  # Ensure the file has the required columns
+  if (!all(c("chr", "start", "end") %in% colnames(danpos_data))) {
+    stop("The DANPOS file must contain 'chr', 'start', and 'end' columns.")
+  }
+  
+  # Create a GRanges object for the nucleosome regions
+  gr <- GRanges(
+    seqnames = danpos_data$chr,
+    ranges = IRanges(start = danpos_data$start, end = danpos_data$end)
+  )
+  
+  # Load the reference genome
+  genome_seq <- readDNAStringSet(genome)
+  
+  # Extract sequences for the nucleosome regions
+  sequences <- getSeq(genome_seq, gr)
+  
+  # Calculate GC content for each region
+  gc_content <- letterFrequency(sequences, letters = c("G", "C"), as.prob = TRUE)
+  gc_content <- rowSums(gc_content) * 100  # Convert to percentage
+  
+  # Add GC content to the DANPOS data
+  danpos_data$GC_Content <- gc_content
+  
+  return(danpos_data)
+}
+
+# -----------------------------------------------
+# Data Preparation
+# -----------------------------------------------
+
+# Calculate GC content for WT and hrp1hrp3
+gc_data_WT <- calculate_gc_content(danpos_file_WT, reference_genome)
+gc_data_hrp1hrp3 <- calculate_gc_content(danpos_file_hrp1hrp3, reference_genome)
+
+# Perform Kolmogorov-Smirnov test
+ks_test <- ks.test(gc_data_WT$GC_Content, gc_data_hrp1hrp3$GC_Content)
+
+# Print the results
+cat("Kolmogorov-Smirnov Test Results:\n")
+cat("D statistic:", ks_test$statistic, "\n")
+cat("P-value:", ks_test$p.value, "\n")
+
+# -----------------------------------------------
+# Visualization
+# -----------------------------------------------
+
+# Plot for WT
+p1 <- ggplot(gc_data_WT, aes(x = GC_Content)) +
+  geom_histogram(aes(y = ..density..), 
+                 bins = 30, 
+                 fill = "steelblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "red", linewidth = 1) +
+  theme_minimal() +
+  labs(
+    title = "Distribution of GC Content Around Nucleosome Dyads (WT)",
+    subtitle = "Regions defined by DANPOS output",
+    x = "GC Content (%)",
+    y = "Density"
+  ) +
+  ylim(0, 0.1) +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  ) +
+  scale_x_continuous(breaks = seq(0, 100, by = 10)) +
+  geom_vline(aes(xintercept = mean(GC_Content)), 
+             linetype = "dashed", 
+             color = "darkred")
+
+# Save the WT plot
+ggsave(p20a, filename = output_plot_WT, height = 7.5, width = 10, units = "cm")
+
+# Plot for hrp1hrp3
+p2 <- ggplot(gc_data_hrp1hrp3, aes(x = GC_Content)) +
+  geom_histogram(aes(y = ..density..), 
+                 bins = 30, 
+                 fill = "steelblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "red", linewidth = 1) +
+  theme_minimal() +
+  labs(
+    title = "Distribution of GC Content Around Nucleosome Dyads (hrp1hrp3)",
+    subtitle = "Regions defined by DANPOS output",
+    x = "GC Content (%)",
+    y = "Density"
+  ) +
+  ylim(0, 0.1) +
+  theme(
+    text = element_text(size = 15), 
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "none", 
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  ) +
+  scale_x_continuous(breaks = seq(0, 100, by = 10)) +
+  geom_vline(aes(xintercept = mean(GC_Content)), 
+             linetype = "dashed", 
+             color = "darkred")
+
+# Save the hrp1hrp3 plot
+ggsave(p20b, filename = output_plot_hrp1hrp3, height = 7.5, width = 10, units = "cm")
+
+# -----------------------------------------------
+# Completion
+# -----------------------------------------------
+
+cat("Plots saved to:", output_dir, "\n")
+```
+
