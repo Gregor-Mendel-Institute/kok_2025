@@ -6,10 +6,10 @@
 5. Long-read
 
 ## Files
-| File | How it was generated | Explaination |
+| File | How it was generated | Explanation |
 |------|---------|--------------|
-|"annotation.gtf"| Long-read pipeline, followed by DEseq_antisense.R , followed by extract_de_anti.sh | DE antisense transcripts |
-|"as_genes.bed"  | Long-read pipeline, followed by DEseq_antisense.R , followed by extract_de_anti.sh | DE antisense transcripts |
+|merged_default_antisense_significant.gtf | Long-read pipeline (main.nf)| DE antisense transcripts |
+|merged_default_antisense_significant.bed  | Long-read pipeline (main.nf) | DE antisense transcripts |
 
 
 ## Figures
@@ -62,7 +62,7 @@
 | S4B | MNase-seq | MNase_seq_nfcore | NA | GC_analysis.Rmd || Update figure?
 | S4C | MNase-seq| MNase_seq_nfcore | MNase_computematrix.sh ||| Please double check this!
 | S4D | Missing?
-| S4E | Iso-seq | Long_read | NA | supp_figure_pairs.R | NA | Done
+| S4E | Iso-seq | Long_read (main.nf)| NA | supp_figure_pairs.R | NA | Done
 | S5 | NEW
 | S6A | mRNA-seq | RNA_seq_processing.sh || RNA_seq_remodelers.Rmd | Figure_1.xlsx | Missing file
 | S6B | mRNA-seq | RNA_seq_processing.sh || RNA_seq_remodelers.Rmd | Figure_1.xlsx, sexualreproductionlist.txt | Missing files
@@ -72,6 +72,6 @@
 | S10E | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh |  ChIP_seq_CHD1.Rmd | annotation.bed (*), mean_tpm.txt | Missing file
 | S10F | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | metadata.xlsx | Missing file
 | S10G | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | metadata.xlsx | Missing file
-| S11 | Iso-seq, mRNA-seq| Long_read | sense_process.R  |  supp_figure_sense.R | NA | Done
+| S11 | Iso-seq, mRNA-seq| Long_read (review.nf) | sense_process.R  |  supp_figure_sense.R | NA | Done
 
 
