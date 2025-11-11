@@ -5,11 +5,13 @@
 
 ## input:
 ## 1, path to sense gtf from pipeline
-gtf_sense_path <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/results_review/annos/merged_default_modified_sense.gtf"
+#gtf_sense_path <- "/path_to_long_read_pipeline/results_review/annos/merged_default_modified_sense.gtf"
+
 ## 2, path to official annotation gff3
-gff_anno_gff3_path <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/annotations/Schizosaccharomyces_pombe.ASM294v2.60.gff3"
+#gff_anno_gff3_path <- "/path_to_long_read_pipeline/annotations/Schizosaccharomyces_pombe.ASM294v2.60.gff3"
+
 ## 3, path to output file
-output_path <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/results_review/annos/merged_default_modified_sense_filtered_TSS_fixed.gtf"
+#output_path <- "/path_to_long_read_pipeline/results_review/annos/merged_default_modified_sense_filtered_TSS_fixed.gtf"
 
 library(tidyverse)
 library(valr)

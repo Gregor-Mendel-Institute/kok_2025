@@ -14,18 +14,21 @@ library(tidyverse)
 
 ## input:
 # merged bw files
-bw1 <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/sense/scripts/sense_mRNA/merged_bw/WT.merged.forward.bw"
-bw2 <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/sense/scripts/sense_mRNA/merged_bw/WT.merged.reverse.bw"
-bw3 <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/sense/scripts/sense_mRNA/merged_bw/hrp1hrp3.merged.forward.bw"
-bw4 <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/sense/scripts/sense_mRNA/merged_bw/hrp1hrp3.merged.reverse.bw"
+#bw1 <- "/path to bigwigs/sense_mRNA/merged_bw/WT.merged.forward.bw"
+#bw2 <- "/path to bigwigs/sense_mRNA/merged_bw/WT.merged.reverse.bw"
+#bw3 <- "/path to bigwigs/sense_mRNA/merged_bw/hrp1hrp3.merged.forward.bw"
+#bw4 <- "/path to bigwigs/sense_mRNA/merged_bw/hrp1hrp3.merged.reverse.bw"
 
 # annotations
-anti_sense_path <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/results/annos/merged_default_antisense.gtf"
-sense_path <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/results_review/annos/merged_default_modified_sense_filtered_TSS_fixed.gtf"
+#anti_sense_path <- "/path to long_read_pipeline/results/annos/merged_default_antisense.gtf"
+#sense_path <- "/path to long_read_pipeline/results_review/annos/merged_default_modified_sense_filtered_TSS_fixed.gtf"
 
 # output
-output_path <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/correlation_sense_antisense_wt_hrp13.pdf"
-output_path1 <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/PRO_seq_sense.pdf"
+#output_path <- "correlation_sense_antisense_wt_hrp13.pdf"
+#output_path1 <- "PRO_seq_sense.pdf"
+
+#bw_path <- "path to bw files/merged_normed/"
+#gtf_file <- sense_path
 
 # -----------------------------------------------
 # Figure S11B
@@ -94,7 +97,7 @@ anti_sense <- read_delim(anti_sense_path,col_names = FALSE,
 anti_sense <- anti_sense %>% filter(X3=="transcript") %>% mutate(gene=str_extract(X9, "gene_id \"[^\"]+\"") %>% gsub("gene_id \"","",.)) %>% mutate(tx=str_extract(X9, "transcript_id \"[^\"]+\"") %>% gsub("transcript_id \"","",.)) %>%
   dplyr::select(gene,tx,X1,X4,X5,X7) %>% rename(chrom=X1,start=X4,end=X5,strand=X7) %>% mutate(gene = str_remove(gene,"\""),
                                                                                              tx = str_remove(tx,"\""))
-sense <-  read_delim("/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/results/annos/merged_default_modified_sense_filtered_TSS_fixed.gtf",col_names = FALSE, 
+sense <-  read_delim(sense_path,col_names = FALSE, 
  delim = "\t",comment = "#")
 
 # keep transcripts only
@@ -198,9 +201,6 @@ library(ggthemes)
 
 ## input
 
-bw_path <- "/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/PRO-seq/220923/bw/merged_normed/"
-#gtf_file <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/results_review/annos/merged_default_modified_sense_filtered_TSS_fixed.gtf"
-gtf_file <- "/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/test.gtf"
 
 # Function to normalize GRanges object to RPM
 

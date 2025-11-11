@@ -1,7 +1,8 @@
 library(tidyverse)
 
 # read in data
-pairs = read_delim("/groups/berger/user/elin.axelsson/projects/projects_2025/pacbio/paper25/results/annos/genes_antisense_info.txt")
+#pairs_path = "/path_to_long_read_pipeline/results/annos/genes_antisense_info.txt"
+pairs <- read_delim(pairs_path)
 
 # plot pie chart showing proportion of genes with antisense transcripts
 
