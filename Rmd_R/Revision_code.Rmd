@@ -1,0 +1,737 @@
+
+This is code for the new figures added during revision.
+
+Figure 3G
+```{r}
+# Read FIMO --text output (tab-delimited); includes q-value in col 9 when using --qv-thresh
+fimo <- read_tsv(
+  "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/annotation_files/TATA.tsv",
+  comment = "#",
+  show_col_types = FALSE
+)
+names(fimo) <- c("motif_id",	"motif_alt_id",	"sequence_name",	"start",	"stop",	"strand",	"score",	"p",	"q",	"matched_sequence")
+
+# Filter hits by q-value (adjust threshold as needed)
+p_thresh <- 0.0004
+hits <- fimo %>% filter(p <= p_thresh)
+
+# Compute motif center and TSS-relative position
+hits <- hits %>%
+  mutate(center_pos = floor((start + stop)/2),
+         rel_pos    = offset_to_TSS(center_pos)) %>%
+  # Guard against any out-of-range entries (shouldn't happen if sequences are all 500bp)
+  filter(rel_pos >= left_bp, rel_pos <= right_bp)
+
+hits_as <- hits
+
+# Option A: histogram of TATA hit positions
+bin_width <- 5  # bp
+p_hist_AS <- ggplot(hits, aes(x = rel_pos)) +
+  geom_histogram(binwidth = bin_width, fill = "black", color = "white", boundary = -500) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  labs(
+    x = "Position relative to TSS (bp)",
+    y = "Count of TATA hits",
+    title = "TATA-box hit positions relative to TSS (FIMO p ≤ 1e-4)"
+  ) +
+    theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save (optional)
+ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/TATA_hist_AS.pdf", p_hist_AS, width = 10, height = 8, units = "cm")
+
+
+
+ks.test(hits_pcg$rel_pos, hits_as$rel_pos)
+wilcox.test(hits_pcg$rel_pos, hits_as$rel_pos, alternative = "two.sided")
+```
+
+Figure S3F
+```{r}
+
+
+suppressPackageStartupMessages({
+  library(data.table)
+  library(dplyr)
+  library(ggplot2)
+})
+
+# -----------------------------
+# User inputs
+# -----------------------------
+files <- c(
+  Q1 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q1.tsv",
+  Q2 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q2.tsv",
+  Q3 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q3.tsv",
+  Q4 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q4.tsv"
+)
+
+sample_name   <- "WT"     # the row label used by plotProfile --samplesLabel (Either WT or hrp1hrp3)
+before_bp     <- 0        # computeMatrix --beforeRegionStartLength (bp)
+after_bp      <- 1200     # computeMatrix --afterRegionStartLength (bp)
+period_bp     <- 152      # nucleosome period; you can scan 170–200 if desired
+subset_start  <- 300      # set to 0 to use full window
+subset_end    <- 1200
+
+# -----------------------------
+# Helpers
+# -----------------------------
+
+# Read a plotProfile outFileNameData TSV where samples are rows and bins are columns
+# Layout expected:
+#  row 1: "bin labels  -0.0Kb ... 1.2Kb  -0.0Kb ... 1.2Kb ..." (ignored)
+#  row 2: "bins        1.0 2.0 ... N" (used to find which columns are numeric bins)
+#  row 3+: "<sample>   genes  v1 v2 ... vN"
+read_profile_rowwise <- function(path, sample_name = "WT") {
+  tab0 <- fread(path, header = FALSE, fill = TRUE, data.table = FALSE)
+  # Find the "bins" row
+  bins_row <- which(tab0[[1]] == "bins")[1]
+  if (is.na(bins_row)) stop("Could not find a row starting with 'bins' in: ", path)
+
+  # Columns that are numeric in the bins row are the bin columns
+  suppressWarnings({
+    num_flags <- !is.na(as.numeric(tab0[bins_row, ]))
+  })
+  bin_cols <- which(num_flags)
+  if (length(bin_cols) == 0) stop("No numeric bin columns detected in 'bins' row of: ", path)
+
+  # Find the row for the requested sample
+  s_row <- which(tab0[[1]] == sample_name)[1]
+  if (is.na(s_row)) stop("Sample row '", sample_name, "' not found in: ", path)
+
+  # Extract numeric vector for this sample
+  y <- suppressWarnings(as.numeric(tab0[s_row, bin_cols]))
+  y <- y[!is.na(y)]
+  if (length(y) == 0) stop("No numeric WT values parsed from: ", path)
+
+  return(y)
+}
+
+# Optional subsetting by genomic range (bp)
+subset_profile <- function(y, bp_per_bin, start_bp = 0, end_bp = 1200) {
+  if (is.null(start_bp) || is.null(end_bp)) return(y)
+  i1 <- max(1, floor(start_bp / bp_per_bin) + 1)
+  i2 <- min(length(y), ceiling(end_bp / bp_per_bin))
+  if (i1 > i2) return(numeric(0))
+  y[i1:i2]
+}
+
+# Phasing metrics
+phasing_amplitude <- function(y, bp_per_bin = 10, period_bp = 190) {
+  y <- as.numeric(y)
+  y <- y - mean(y, na.rm = TRUE)
+  y[is.na(y)] <- 0
+  # Optional light smoothing (uncomment if you prefer):
+  # y <- as.numeric(stats::filter(y, rep(1/5, 5)))
+  N <- length(y)
+  if (N < 4) return(NA_real_)
+  f_bin <- bp_per_bin / period_bp     # cycles per bin
+  Y <- fft(y)
+  freqs <- (0:(N-1)) / N
+  half <- 1:floor(N/2)
+  k <- half[which.min(abs(freqs[half] - f_bin))]
+  Mod(Y[k]) / N
+}
+
+autocorr_strength <- function(y, bp_per_bin = 10, period_bp = 190, max_lag_bp = 400) {
+  y <- as.numeric(y)
+  y <- y - mean(y, na.rm = TRUE)
+  y[is.na(y)] <- 0
+  lag_target <- max(1, round(period_bp / bp_per_bin))
+  ac <- acf(y, plot = FALSE, lag.max = round(max_lag_bp / bp_per_bin), na.action = na.pass)
+  # ac$acf is [lag+1]
+  as.numeric(ac$acf[lag_target + 1])
+}
+
+# Infer bp/bin from total bp and vector length
+infer_bp_per_bin <- function(y, before_bp, after_bp) {
+  total_bp <- before_bp + after_bp
+  total_bp / length(y)
+}
+
+# -----------------------------
+# Main: extract WT, compute metrics per quartile
+# -----------------------------
+measurements <- bind_rows(lapply(names(files), function(q) {
+  y_full <- read_profile_rowwise(files[[q]], sample_name = sample_name)
+  bp_bin <- infer_bp_per_bin(y_full, before_bp, after_bp)
+
+  # Optional subset (e.g., 300–1200 bp)
+  y <- subset_profile(y_full, bp_per_bin = bp_bin, start_bp = subset_start, end_bp = subset_end)
+
+  tibble(
+    quartile   = q,
+    n_bins_all = length(y_full),
+    bp_per_bin = bp_bin,
+    n_bins_used= length(y),
+    amp_fft    = phasing_amplitude(y, bp_per_bin = bp_bin, period_bp = period_bp),
+    ac_nucl    = autocorr_strength(y, bp_per_bin = bp_bin, period_bp = period_bp)
+  )
+})) %>%
+  mutate(quartile = factor(quartile, levels = c("Q1","Q2","Q3","Q4")),
+         q_num    = as.integer(quartile))
+
+print(measurements)
+
+# -----------------------------
+# Trend tests (WT only)
+# -----------------------------
+test_fft <- cor.test(measurements$q_num, measurements$amp_fft, method = "spearman", exact = FALSE)
+test_ac  <- cor.test(measurements$q_num, measurements$ac_nucl, method = "spearman", exact = FALSE)
+
+cat(sprintf("WT FFT amplitude trend across quartiles: rho = %.3f, p = %.3g\n",
+            test_fft$estimate, test_fft$p.value))
+cat(sprintf("WT autocorr trend across quartiles:    rho = %.3f, p = %.3g\n",
+            test_ac$estimate,  test_ac$p.value))
+
+# -----------------------------
+# Plots
+# -----------------------------
+p1 <- ggplot(measurements, aes(x = quartile, y = amp_fft, group = 1)) +
+  geom_point(size = 3, color = "#5C3A1E") +
+  geom_line(color = "#5C3A1E") +
+  labs(title = "WT nucleosome phasing (FFT amplitude at ~190 bp) by antisense quartile",
+       x = "Antisense quartile", y = "FFT amplitude (~190 bp)") +
+  theme_minimal(base_size = 13) + ylim(0,0.35) +
+  theme(
+    text = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right",
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.grid.major = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+print(p1)
+
+ggsave(p1, filename = "/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/FFT_WT.pdf", height=7.5, width = 10, units = "cm")
+```
+
+
+Figure S10D
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# Paths to your quartile TSVs (change the directory if needed)
+tsv_files <- c(
+  Q1 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q1_gene_signal.tsv",
+  Q2 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q2_gene_signal.tsv",
+  Q3 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q3_gene_signal.tsv",
+  Q4 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q4_gene_signal.tsv"
+)
+
+# Helper to read a TSV and pivot to long with a quartile tag
+read_quartile_tsv <- function(path, quartile_label) {
+  # Read; skip deepTools comment lines; keep column names as-is
+  df <- read_tsv(path, comment = "#", show_col_types = FALSE)
+
+  # Identify region columns and sample columns
+  # Handle both odd quoted headers and normal headers
+  clean_names <- function(x) gsub("`|'", "", x)
+  names(df) <- clean_names(names(df))
+
+  # Possible region column name variants
+  region_candidates <- c("chrom","chr","I","'chr'","`chr`","`chr'`","start","'start'","`start`","end","'end'","`end`","name","'name'","`name`")
+  # Take actual intersecting ones in the current df
+  region_cols <- intersect(region_candidates, names(df))
+  # Make sure we include chrom/start/end at minimum; name is optional
+  # If you know your df has exactly these, you can set:
+  # region_cols <- c("chrom","start","end","name")
+  sample_cols <- setdiff(names(df), region_cols)
+
+  # Reshape to long format
+  long <- df %>%
+    pivot_longer(cols = all_of(sample_cols), names_to = "sample", values_to = "signal") %>%
+    mutate(quartile = quartile_label)
+
+  long
+}
+
+# Read all quartiles and bind
+long <- bind_rows(
+  read_quartile_tsv(tsv_files["Q1"], "Q1"),
+  read_quartile_tsv(tsv_files["Q2"], "Q2"),
+  read_quartile_tsv(tsv_files["Q3"], "Q3"),
+  read_quartile_tsv(tsv_files["Q4"], "Q4")
+)
+
+# Clean sample labels if your columns are file names
+label_map <- c(
+  "WT_1_H2Bub_scaled.bw"       = "WT",
+  "hrp1_1_H2Bub_scaled.bw"     = "hrp1",
+  "hrp3_1_H2Bub_scaled.bw"     = "hrp3",
+  "hrp1hrp3_1_H2Bub_scaled.bw" = "hrp1 hrp3",
+  "prf1_1_H2Bub_scaled.bw" = "prf1"
+)
+# If your header contains paths, strip paths first
+long <- long %>%
+  mutate(sample = basename(sample)) %>%
+  mutate(sample = recode(sample, !!!label_map))
+
+# Order factors
+long$quartile <- factor(long$quartile, levels = c("Q1","Q2","Q3","Q4"))
+long$sample   <- factor(long$sample,   levels = c("WT","hrp1","hrp3","hrp1 hrp3", "prf1"))
+
+# Optional: drop NAs and enforce plotting range
+long <- long %>% filter(!is.na(signal))
+
+# Compute WT median per quartile (using only WT rows)
+wt_meds <- long %>%
+  filter(sample == "WT") %>%
+  group_by(quartile) %>%
+  summarise(wt_median = median(signal, na.rm = TRUE), .groups = "drop")
+
+# Boxplots per quartile, colored by strain (one panel per quartile)
+p2 <- ggplot(long, aes(x = sample, y = signal, fill = sample)) +
+  # Facet-specific horizontal line at WT median for that quartile
+#  geom_hline(
+#    data = wt_meds,
+#    aes(yintercept = wt_median),
+#    linetype = "dashed",
+#    color = "grey30",
+#    linewidth = 0.6,
+#    inherit.aes = FALSE
+#  ) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_manual(
+    values = c(
+      "WT"         = "#D3D3D3",
+      "hrp1"       = "#0073B2",
+      "hrp3"       = "#CC79A7",
+      "hrp1 hrp3"  = "#E5A024",
+      "prf1" = "#23891A" 
+    )
+  ) +
+  facet_wrap(~ quartile, nrow = 1) +
+  labs(
+    x = "Strain",
+    y = "ChIP signal (mean over window)",
+    title = "Gene-body quartiles (Q1 = TSS-proximal); dashed = WT median"
+  ) +
+  coord_cartesian(ylim = c(-3, 3)) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+
+# Save (optional)
+ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/H2B_boxplot.pdf", p2, width = 12, height = 8, units = "cm")
+
+```
+
+Figure S5A
+```{r}
+library(Biostrings)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(stringr)
+
+# Files (replace with your paths if needed)
+fa_this <- "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/annotation_files/genotype_antisense_upstream.fasta"
+fa_pcgs <- "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/stress/spombe_pcg_upstream.fasta"
+fa_rand <- "/Volumes/groups/berger/lab/jian.kok/Reference_genomes/S_pombe/test/random_500bp.fasta"
+
+# Helper: overall GC fraction for a DNA string
+gc_frac <- function(x) {
+  s <- toupper(as.character(x))
+  A <- stringr::str_count(s, "A")
+  C <- stringr::str_count(s, "C")
+  G <- stringr::str_count(s, "G")
+  T <- stringr::str_count(s, "T")
+  denom <- A + C + G + T
+  ifelse(denom > 0, (G + C) / denom, NA_real_)
+}
+
+# Read a FASTA and compute per-sequence GC
+read_gc_overall <- function(path, set_label) {
+  fa <- readDNAStringSet(path)
+  tibble(
+    id = names(fa),
+    gc = vapply(fa, gc_frac, numeric(1))
+  ) %>%
+    mutate(set = set_label)
+}
+
+# Build per-sequence GC for all sets
+df_gc <- bind_rows(
+  read_gc_overall(fa_this, "This set (promoters)"),
+  read_gc_overall(fa_pcgs, "All PCGs (promoters)"),
+  read_gc_overall(fa_rand, "Random gene-body")
+)
+
+# Summarise mean GC and 95% CI per set
+overall_gc <- df_gc %>%
+  group_by(set) %>%
+  summarise(
+    n       = sum(!is.na(gc)),
+    mean_gc = mean(gc, na.rm = TRUE),
+    sd_gc   = sd(gc, na.rm = TRUE),
+    se_gc   = sd_gc / sqrt(n),
+    ci_lo   = pmax(0, mean_gc - 1.96 * se_gc),
+    ci_hi   = pmin(1, mean_gc + 1.96 * se_gc),
+    .groups = "drop"
+  )
+
+# Quick checks (optional)
+print(overall_gc)
+# If the random bar doesn't show, confirm sequences exist:
+# system(paste("grep -c '^>'", shQuote(fa_rand)))
+
+# Barplot
+p4 <- ggplot(overall_gc %>%
+         filter(set %in% c("This set (promoters)", "All PCGs (promoters)", "Random gene-body")) %>%
+         mutate(set = factor(set, levels = c("This set (promoters)", "All PCGs (promoters)", "Random gene-body"))),
+       aes(x = set, y = mean_gc, fill = set)) +
+  geom_col(width = 0.6, alpha = 0.9, color = "black") +
+  geom_text(aes(label = sprintf("%.1f%%", 100 * mean_gc)),
+            vjust = -0.6, size = 3.6) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  coord_cartesian(ylim = c(0.25, 0.45)) +
+  scale_fill_manual(values = c(
+    "This set (promoters)" = "#FE7671",
+    "All PCGs (promoters)" = "#999999",
+    "Random gene-body"     = "#E5A024"
+  )) +
+  labs(x = NULL, y = "Mean GC content", title = "GC content by set") +
+    theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save (optional)
+ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/GC_barplot.pdf", p4, width = 8, height = 8, units = "cm")
+```
+
+Figure S5C
+```{r}
+library(dplyr); library(ggplot2)
+df <- tibble(
+  set = c("This study", "All PCGs"),
+  n_tata = c( 291, 1162 ),   # fill in
+  n_total = c( 1519,  5145 )
+) %>%
+  mutate(prop = n_tata/n_total,
+         se = sqrt(prop*(1-prop)/n_total),
+         ci_lo = prop - 1.96*se,
+         ci_hi = prop + 1.96*se)
+
+p3 <- ggplot(df, aes(x = set, y = prop)) +
+  geom_col(fill = "grey70") +
+  geom_errorbar(aes(ymin = pmax(0,ci_lo), ymax = pmin(1,ci_hi)), width = 0.15) +
+  geom_text(aes(label = sprintf("%d/%d (%.1f%%)", n_tata, n_total, 100*prop)),
+            vjust = -0.6, size = 3.5) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.5)) +
+  labs(y = "Promoters with ≥1 TATA-box hit", x = NULL) +
+    theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save (optional)
+ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/TATA_barplot.pdf", p3, width = 8, height = 8, units = "cm")
+
+# Fisher's exact test
+tab <- matrix(c(291, 1519-291,
+                1162, 5145-1162),
+              nrow = 2, byrow = TRUE,
+              dimnames = list(Group = c("This study", "All PCGs"),
+                              Outcome = c("TATA", "No TATA")))
+fisher.test(tab)
+```
+
+Figure S5D
+```{r}
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+
+# Parameters for your window
+left_bp  <- -500
+right_bp <- -1
+offset_to_TSS <- function(pos1) pos1 + left_bp - 1  # maps 1 -> -500, 500 -> -1
+
+# Read FIMO --text output (tab-delimited); includes q-value in col 9 when using --qv-thresh
+fimo <- read_tsv(
+  "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/annotation_files/TATA_pcg.tsv",
+  comment = "#",
+  show_col_types = FALSE
+)
+names(fimo) <- c("motif_id",	"motif_alt_id",	"sequence_name",	"start",	"stop",	"strand",	"score",	"p",	"q",	"matched_sequence")
+
+# Filter hits by q-value (adjust threshold as needed)
+p_thresh <- 0.0004
+hits <- fimo %>% filter(p <= p_thresh)
+
+# Compute motif center and TSS-relative position
+hits <- hits %>%
+  mutate(center_pos = floor((start + stop)/2),
+         rel_pos    = offset_to_TSS(center_pos)) %>%
+  # Guard against any out-of-range entries (shouldn't happen if sequences are all 500bp)
+  filter(rel_pos >= left_bp, rel_pos <= right_bp)
+
+hits_pcg <- hits
+
+# Option A: histogram of TATA hit positions
+bin_width <- 5  # bp
+p_hist_PCG <- ggplot(hits, aes(x = rel_pos)) +
+  geom_histogram(binwidth = bin_width, fill = "black", color = "white", boundary = -500) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  labs(
+    x = "Position relative to TSS (bp)",
+    y = "Count of TATA hits",
+    title = "TATA-box hit positions relative to TSS (FIMO p ≤ 1e-4)"
+  ) +
+    theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+# Save (optional)
+ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/TATA_hist_PCG.pdf", p_hist_PCG, width = 10, height = 8, units = "cm")
+```
+
+Figure S5F
+```{r}
+# Load required libraries
+library(readr)  # For reading TOMTOM results
+library(dplyr)  # For data manipulation
+library(reshape2)  # For reshaping data
+library(pheatmap)  # For creating heatmaps
+
+# Step 1: Import TOMTOM results
+# Replace "tomtom.tsv" with the path to your TOMTOM results file
+tomtom_results <- read_tsv("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/motif_analysis/tomtom_test.tsv", col_types = cols())
+
+# View the structure of the imported data
+head(tomtom_results)
+
+# Step 2: Filter significant matches
+# Adjust column names based on your TOMTOM output
+significant_matches <- tomtom_results %>%
+  filter(`p-value` < 0.05) %>%  # Filter for significant matches
+  dplyr::select(Query_ID, Target_ID, `p-value`)  # Select relevant columns
+
+# Step 3: Create a matrix for the heatmap
+# Convert p-values to -log10(p-value) for better visualization
+significant_matches <- significant_matches %>%
+  mutate(log_p_value = -log10(`p-value`))
+
+# Reshape the data into a wide format (matrix)
+heatmap_matrix <- significant_matches %>%
+  dcast(Query_ID ~ Target_ID, value.var = "log_p_value", fill = 0)  # Fill missing values with 0
+
+# Set row names as the Query_ID and remove the first column
+rownames(heatmap_matrix) <- heatmap_matrix$Query_ID
+heatmap_matrix <- heatmap_matrix[, -1]
+
+# Step 4: Create the heatmap
+TF_heat <- pheatmap(
+  heatmap_matrix,
+  cluster_rows = TRUE,  # Cluster rows (query motifs)
+  cluster_cols = TRUE,  # Cluster columns (target motifs)
+  color = colorRampPalette(c("white", "blue", "red"))(50),  # Color gradient
+  main = "TOMTOM Heatmap: Query vs Target Motifs",
+  fontsize_row = 10,  # Font size for row labels
+  fontsize_col = 10,  # Font size for column labels
+  border_color = "grey"  # Add borders to cells
+)
+
+ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Plots/TF_heat.pdf", plot = TF_heat, width = 6, height = 4)
+```
+
+
+Figure 7C
+```{r}
+chipseq.all <- read.table("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/computematrix/myc_scaled.tab", header = TRUE, sep = "\t", skip = 2)
+
+#MNaseseq <- MNaseseq[,-c(1:40, 126:200, 201:240, 326:400, 401:440, 526:600, 601:640, 726:800)]
+
+
+chipseq.all.long <- pivot_longer(
+  chipseq.all,
+  cols = everything(),
+  names_to = c("strain", "position"),
+  names_sep = "\\.",
+  values_to = "Signal"
+)
+
+chipseq.all.long$position <- as.numeric(chipseq.all.long$position)  # Convert positions to numeric
+#chipseq.all.long$position <- chipseq.all.long$position * 10
+chipseq.all.long$position[is.na(chipseq.all.long$position)] <- 0
+#chipseq.all.long$position <- chipseq.all.long$position - 800
+
+library(dplyr)
+
+chipseq.all.means <- chipseq.all.long %>%
+  group_by(strain, position) %>%
+  summarise(MeanSignal = mean(Signal, na.rm = TRUE), .groups = 'drop')  # Calculate mean, drop grouping
+
+chipseq.all.means <- aggregate(Signal ~ strain + position, data = chipseq.all.long, FUN = function(x) mean(x, na.rm = TRUE))
+
+chipseq.all.means$strain <- factor(chipseq.all.means$strain, levels = c("WT", "prf1"))
+
+
+p14 <- ggplot(chipseq.all.means, aes(x = position, y = Signal, color = strain)) +
+  geom_vline(xintercept = c(32.5, 72.5), linetype = "dashed", color = "grey40") +
+  geom_line(linewidth = 1) +  # Add lines
+  labs(title = "ChIP-seq",
+       y = "Scaled coverage",
+       color = "") +
+  theme_minimal() +  # Apply minimal theme 
+  scale_x_continuous(breaks = c(0, 32.5, 72.5, 103),
+                     labels = c("start-up", "TSS", "TES", "end-down"),
+                     limits = c(1, 103)) +
+  scale_y_continuous(breaks = seq(-0.6, 0.4, by = 0.5), limits = c(-0.6,0.4)) +
+  scale_color_manual(values = c("WT" = "#D3D3D3", "prf1" = "#23891A")) +
+  theme(text = element_text(size = 15), 
+        plot.title = element_text(hjust = 0.5), 
+        legend.position = "none", 
+        panel.border = element_rect(color = "black", fill = NA, size = 1), 
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),
+        axis.ticks = element_line(color = "black", linewidth = 0.5),
+        axis.ticks.length = unit(0.4, "cm"),
+        axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+ggsave(p14, filename = "/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/myc.pdf", height=7.5, width = 10, units = "cm")
+```
+
+Figure 7D
+```{r}
+library(data.table)
+
+inside <- fread("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/totals_in_genes.tsv", header = FALSE, col.names = c("sample","sum_in_genes"))
+genome <- fread("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/totals_genome.tsv", header = FALSE, col.names = c("sample","sum_total"))
+
+res <- merge(inside, genome, by = "sample")
+res[, sum_outside := sum_total - sum_in_genes]
+res[, frac_in_genes := sum_in_genes / sum_total]
+res[, frac_outside := 1 - frac_in_genes]
+
+fwrite(res, "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/gene_body_fraction.tsv", sep = "\t")
+
+print(res[order(-frac_in_genes)])
+
+library(ggplot2)
+library(scales)
+
+library(data.table)
+library(ggplot2)
+library(scales)
+
+# Prepare data
+res_dt <- as.data.table(res)
+res_dt[, frac_outside := 1 - frac_in_genes]
+
+long <- melt(
+  res_dt,
+  id.vars = "sample",
+  measure.vars = c("frac_in_genes", "frac_outside"),
+  variable.name = "region",
+  value.name = "fraction"
+)
+
+# Nice labels
+long[, region := fifelse(region == "frac_in_genes", "In genes", "Outside genes")]
+
+# Define base colors for specific samples (for the "In genes" segment)
+# Replace names to match your exact sample identifiers in res$sample
+in_colors <- c(
+  "hrp3_2_myc_scaled.bw" = "#D3D3D3", # light gray
+  "prf1_1_myc_scaled.bw" = "#23891A"  # green
+)
+
+# Derive "outside" colors as lighter/desaturated variants
+outside_colors <- c(
+  "hrp3_2_myc_scaled.bw" = "#E8E8E8", # lighter gray
+  "prf1_1_myc_scaled.bw" = "#7FC37C"  # lighter green
+)
+
+# Default colors for other samples (if present)
+default_in <- "#4682B4"     # steelblue
+default_out <- "#B0CFE3"    # light steelblue
+
+# Build a color mapping by sample and region
+# Start with defaults for all samples present
+samples <- unique(long$sample)
+col_map <- setNames(rep(default_in, length(samples)), samples)
+col_map_out <- setNames(rep(default_out, length(samples)), samples)
+
+# Override with specified colors where available
+for (nm in names(in_colors)) if (nm %in% samples) col_map[nm] <- in_colors[nm]
+for (nm in names(outside_colors)) if (nm %in% samples) col_map_out[nm] <- outside_colors[nm]
+
+# Function to map fill by both sample and region
+long[, fill_key := ifelse(region == "In genes", paste0(sample, "_in"), paste0(sample, "_out"))]
+
+fill_values <- c(
+  setNames(as.vector(col_map), paste0(names(col_map), "_in")),
+  setNames(as.vector(col_map_out), paste0(names(col_map_out), "_out"))
+)
+
+p <- ggplot(long, aes(x = reorder(sample, res_dt$frac_in_genes[match(sample, res_dt$sample)]),
+                      y = fraction,
+                      fill = fill_key)) +
+  geom_col(color = "black", size = 0.7, width = 0.9) +
+  scale_fill_manual(
+    values = fill_values,
+    guide = "none"
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), expand = expansion(mult = c(0, 0.02))) +
+  labs(x = "Sample", y = "Signal fraction", title = "ChIP-seq signal distribution: In genes vs outside") +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.grid.major = element_blank(),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.4, "cm"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5)
+  )
+
+ggsave(p, filename = "/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/myc_fraction.pdf", height=7.5, width = 7.5, units = "cm")
+
+```
+
