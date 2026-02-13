@@ -33,7 +33,7 @@ library(GenomicFeatures)
 
 # Define paths
 bw_path <- "/path/to/bw/files/"  # Replace with actual path
-gtf_file <- "/path/to/annotations.gtf"  # Replace with actual GTF file path
+gtf_file <- "/path/to/pcg.gtf"  # Replace with actual GTF file path
 output_dir <- "/path/to/output/plots/"  # Replace with desired output directory
 
 # Define sample metadata

@@ -15,7 +15,7 @@ ml deeptools/3.3.1-foss-2018b-python-3.6.6
 # Base directories
 BASE_DIR="/path/to/project"  # Replace with the base directory of your project
 BIGWIG_DIR="$BASE_DIR/bigwigs"  # Directory containing bigWig files
-REGIONS_FILE="/path/to/annotations/annotation.bed"  # Replace with the path to your BED file
+REGIONS_FILE="/path/to/annotations/pcg.bed"  # Replace with the path to your BED file
 OUTPUT_DIR="$BASE_DIR/deepTools/computeMatrix"  # Output directory for computeMatrix results
 
 # Create output directory if it doesn't exist

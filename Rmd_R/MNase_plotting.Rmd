@@ -17,7 +17,7 @@ library(pracma)
 library(ggplot2)
 
 # 1. Define input and output paths
-input_file <- "/path/to/(remodeler)_vs_WT.tab"  # Replace with the actual path to your input file
+input_file <- "/path/to/plusonenuc_filtered_WT.bed"  # Replace with the actual path to your input file
 output_dir <- "/path/to/output/plots/"     # Replace with the directory where plots will be saved
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)  # Create output directory if it doesn't exist
 

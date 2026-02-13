@@ -5,7 +5,7 @@ Figure 3G
 ```{r}
 # Read FIMO --text output (tab-delimited); includes q-value in col 9 when using --qv-thresh
 fimo <- read_tsv(
-  "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/annotation_files/TATA.tsv",
+  "path/to/TATA.tsv",
   comment = "#",
   show_col_types = FALSE
 )
@@ -46,7 +46,7 @@ p_hist_AS <- ggplot(hits, aes(x = rel_pos)) +
   )
 
 # Save (optional)
-ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/TATA_hist_AS.pdf", p_hist_AS, width = 10, height = 8, units = "cm")
+ggsave("TATA_hist_AS.pdf", p_hist_AS, width = 10, height = 8, units = "cm")
 
 
 
@@ -68,10 +68,10 @@ suppressPackageStartupMessages({
 # User inputs
 # -----------------------------
 files <- c(
-  Q1 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q1.tsv",
-  Q2 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q2.tsv",
-  Q3 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q3.tsv",
-  Q4 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/as_quartile_analysis/mnase_q4.tsv"
+  Q1 = "path/to/mnase_q1.tsv",
+  Q2 = "path/to/mnase_q2.tsv",
+  Q3 = "path/to/mnase_q3.tsv",
+  Q4 = "path/to/mnase_q4.tsv"
 )
 
 sample_name   <- "WT"     # the row label used by plotProfile --samplesLabel (Either WT or hrp1hrp3)
@@ -213,7 +213,7 @@ p1 <- ggplot(measurements, aes(x = quartile, y = amp_fft, group = 1)) +
   )
 print(p1)
 
-ggsave(p1, filename = "/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/FFT_WT.pdf", height=7.5, width = 10, units = "cm")
+ggsave(p1, filename = "FFT_WT.pdf", height=7.5, width = 10, units = "cm")
 ```
 
 
@@ -227,10 +227,10 @@ library(stringr)
 
 # Paths to your quartile TSVs (change the directory if needed)
 tsv_files <- c(
-  Q1 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q1_gene_signal.tsv",
-  Q2 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q2_gene_signal.tsv",
-  Q3 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q3_gene_signal.tsv",
-  Q4 = "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/Q4_gene_signal.tsv"
+  Q1 = "path/to/Q1_gene_signal.tsv",
+  Q2 = "path/to/Q2_gene_signal.tsv",
+  Q3 = "path/to/Q3_gene_signal.tsv",
+  Q4 = "path/to/Q4_gene_signal.tsv"
 )
 
 # Helper to read a TSV and pivot to long with a quartile tag
@@ -335,7 +335,7 @@ p2 <- ggplot(long, aes(x = sample, y = signal, fill = sample)) +
 
 
 # Save (optional)
-ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/H2B_boxplot.pdf", p2, width = 12, height = 8, units = "cm")
+ggsave("H2B_boxplot.pdf", p2, width = 12, height = 8, units = "cm")
 
 ```
 
@@ -348,9 +348,9 @@ library(scales)
 library(stringr)
 
 # Files (replace with your paths if needed)
-fa_this <- "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/annotation_files/genotype_antisense_upstream.fasta"
-fa_pcgs <- "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/final_annotation/stress/spombe_pcg_upstream.fasta"
-fa_rand <- "/Volumes/groups/berger/lab/jian.kok/Reference_genomes/S_pombe/test/random_500bp.fasta"
+fa_this <- "path/to/genotype_antisense_upstream.fasta"
+fa_pcgs <- "path/to/spombe_pcg_upstream.fasta"
+fa_rand <- "path/to/random_500bp.fasta"
 
 # Helper: overall GC fraction for a DNA string
 gc_frac <- function(x) {
@@ -426,7 +426,7 @@ p4 <- ggplot(overall_gc %>%
   )
 
 # Save (optional)
-ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/GC_barplot.pdf", p4, width = 8, height = 8, units = "cm")
+ggsave("GC_barplot.pdf", p4, width = 8, height = 8, units = "cm")
 ```
 
 Figure S5C
@@ -461,7 +461,7 @@ p3 <- ggplot(df, aes(x = set, y = prop)) +
   )
 
 # Save (optional)
-ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/TATA_barplot.pdf", p3, width = 8, height = 8, units = "cm")
+ggsave("TATA_barplot.pdf", p3, width = 8, height = 8, units = "cm")
 
 # Fisher's exact test
 tab <- matrix(c(291, 1519-291,
@@ -486,7 +486,7 @@ offset_to_TSS <- function(pos1) pos1 + left_bp - 1  # maps 1 -> -500, 500 -> -1
 
 # Read FIMO --text output (tab-delimited); includes q-value in col 9 when using --qv-thresh
 fimo <- read_tsv(
-  "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/annotation_files/TATA_pcg.tsv",
+  "path/to/TATA_pcg.tsv",
   comment = "#",
   show_col_types = FALSE
 )
@@ -527,7 +527,7 @@ p_hist_PCG <- ggplot(hits, aes(x = rel_pos)) +
   )
 
 # Save (optional)
-ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/TATA_hist_PCG.pdf", p_hist_PCG, width = 10, height = 8, units = "cm")
+ggsave("TATA_hist_PCG.pdf", p_hist_PCG, width = 10, height = 8, units = "cm")
 ```
 
 Figure S5F
@@ -540,7 +540,7 @@ library(pheatmap)  # For creating heatmaps
 
 # Step 1: Import TOMTOM results
 # Replace "tomtom.tsv" with the path to your TOMTOM results file
-tomtom_results <- read_tsv("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Long_read_transcriptome_DNALink/motif_analysis/tomtom_test.tsv", col_types = cols())
+tomtom_results <- read_tsv("path/to/tomtom_test.tsv", col_types = cols())
 
 # View the structure of the imported data
 head(tomtom_results)
@@ -576,13 +576,13 @@ TF_heat <- pheatmap(
   border_color = "grey"  # Add borders to cells
 )
 
-ggsave("/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Plots/TF_heat.pdf", plot = TF_heat, width = 6, height = 4)
+ggsave("TF_heat.pdf", plot = TF_heat, width = 6, height = 4)
 ```
 
 
 Figure 7C
 ```{r}
-chipseq.all <- read.table("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/computematrix/myc_scaled.tab", header = TRUE, sep = "\t", skip = 2)
+chipseq.all <- read.table("path/to/myc_scaled.tab", header = TRUE, sep = "\t", skip = 2)
 
 #MNaseseq <- MNaseseq[,-c(1:40, 126:200, 201:240, 326:400, 401:440, 526:600, 601:640, 726:800)]
 
@@ -634,22 +634,22 @@ p14 <- ggplot(chipseq.all.means, aes(x = position, y = Signal, color = strain)) 
         axis.text.y = element_text(angle = 90, hjust = 0.5)
   )
 
-ggsave(p14, filename = "/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/myc.pdf", height=7.5, width = 10, units = "cm")
+ggsave(p14, filename = "myc.pdf", height=7.5, width = 10, units = "cm")
 ```
 
 Figure 7D
 ```{r}
 library(data.table)
 
-inside <- fread("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/totals_in_genes.tsv", header = FALSE, col.names = c("sample","sum_in_genes"))
-genome <- fread("/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/totals_genome.tsv", header = FALSE, col.names = c("sample","sum_total"))
+inside <- fread("/path/to/totals_in_genes.tsv", header = FALSE, col.names = c("sample","sum_in_genes"))
+genome <- fread("/path/to/totals_genome.tsv", header = FALSE, col.names = c("sample","sum_total"))
 
 res <- merge(inside, genome, by = "sample")
 res[, sum_outside := sum_total - sum_in_genes]
 res[, frac_in_genes := sum_in_genes / sum_total]
 res[, frac_outside := 1 - frac_in_genes]
 
-fwrite(res, "/Volumes/groups/berger/user/jian.kok/Projects/CHD1/Sequencing_Results/Revision_ChIP_seq/analysis/gene_body_fraction.tsv", sep = "\t")
+fwrite(res, "gene_body_fraction.tsv", sep = "\t")
 
 print(res[order(-frac_in_genes)])
 
@@ -731,7 +731,7 @@ p <- ggplot(long, aes(x = reorder(sample, res_dt$frac_in_genes[match(sample, res
     axis.text.y = element_text(angle = 90, hjust = 0.5)
   )
 
-ggsave(p, filename = "/Users/jian.kok/Library/CloudStorage/OneDrive-VBC/jian.kok/Manuscripts/Revision/Figures/Plots/myc_fraction.pdf", height=7.5, width = 7.5, units = "cm")
+ggsave(p, filename = "myc_fraction.pdf", height=7.5, width = 7.5, units = "cm")
 
 ```
 

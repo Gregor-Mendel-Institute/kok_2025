@@ -271,10 +271,10 @@ kmeans_clusters <- kmeans(l2fc.all.strains.sense, centers = 4)
 
 # Save or load k-means clustering results
 # Uncomment the following line to save the clustering results
-# write.table(data.frame(kmeans_clusters$cluster), file = "/path/to/output/all_clusters.txt", sep = "\t", quote = FALSE, row.names = TRUE, col.names = TRUE)
+ write.table(data.frame(kmeans_clusters$cluster), file = "/path/to/output/all_clusters.txt", sep = "\t", quote = FALSE, row.names = TRUE, col.names = TRUE)
 
 # Load clustering results (if already saved)
-kmeans_clusters <- read.table("/path/to/input/all_clusters.txt", header = TRUE, sep = "\t")
+#kmeans_clusters <- read.table("/path/to/input/all_clusters.txt", header = TRUE, sep = "\t")
 
 # Add cluster information to the data
 l2fc.all.strains.sense$Cluster <- kmeans_clusters$cluster
