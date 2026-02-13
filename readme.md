@@ -41,11 +41,11 @@ Here is the workflow for the figures.
 | 2B | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | meta/Figure_2.xlsx 
 | 2C | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| curated/pcg.gtf | 
 | 2D | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| curated/pcg.gtf | 
-| 3A | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| output/anno/DE_antisense.gtf 
-| 3B | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| output/anno/DE_antisense.gtf  
+| 3A | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| output/anno/DE_antisense.gff 
+| 3B | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| output/anno/DE_antisense.gff  
 | 3D | MNase-seq | MNase_seq_nfcore	| MNase_computematrix.sh | MNase_plotting.Rmd | output/anno/as_genes.bed(*)
 | 3E | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | PRO_seq_CHD1.Rmd | output/anno/as_genes.bed(*) 
-| 3F | MNase-seq | MNase_seq_nfcore, PRO_seq_pipeline | MNase_computematrix.sh | PRO_seq_CHD1.Rmd | output/anno/as_genes.bed(*), output/anno/DE_antisense.gtf 
+| 3F | MNase-seq | MNase_seq_nfcore, PRO_seq_pipeline | MNase_computematrix.sh | PRO_seq_CHD1.Rmd | output/anno/as_genes.bed(*), output/anno/DE_antisense.gff 
 | 3G | NA | NA | NA |  Revision_code.Rmd | output/tabs/TATA.tsv
 | 4A | mRNA-seq |  RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd |  meta/Figure_2.xlsx, curated/sexualreproductionlist.tsv, curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt 
 | 4B | mRNA-seq |  RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd |  curated/sexualreproductionlist.tsv, curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt  
