@@ -32,64 +32,64 @@ Here is the workflow for the figures.
 
 ### Main Figures:
 
-| <div style="width:30px">Fig.</div>  | <div style="width:100px">Data</div>  | Processing       |	Intermediate | Analysis/Plot | Extra files for analysis |
-|--------|------------|------------------|---------------|---------------|-------------
-| <div style="width:30px">1B</div>  | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | MNase_plotting.Rmd | output/anno/plusonenuc_filtered_WT.bed(*)
-| 1C | MNase-seq | MNase_seq_nfcore	| MNase_computematrix.sh | MNase_plotting.Rmd | output/anno/plusonenuc_filtered_WT.bed(*)
-| 1D | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_remodelers.Rmd | meta/Figure_1.xlsx
-| 2A | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | meta/Figure_2.xlsx 
-| 2B | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | meta/Figure_2.xlsx 
-| 2C | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| curated/pcg.gtf | 
-| 2D | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| curated/pcg.gtf | 
-| 3A | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| output/anno/DE_antisense.gff 
-| 3B | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| output/anno/DE_antisense.gff  
-| 3D | MNase-seq | MNase_seq_nfcore	| MNase_computematrix.sh | MNase_plotting.Rmd | output/anno/as_genes.bed(*)
-| 3E | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | PRO_seq_CHD1.Rmd | output/anno/as_genes.bed(*) 
-| 3F | MNase-seq | MNase_seq_nfcore, PRO_seq_pipeline | MNase_computematrix.sh | PRO_seq_CHD1.Rmd | output/anno/as_genes.bed(*), output/anno/DE_antisense.gff 
-| 3G | NA | NA | NA |  Revision_code.Rmd | output/tabs/TATA.tsv
-| 4A | mRNA-seq |  RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd |  meta/Figure_2.xlsx, curated/sexualreproductionlist.tsv, curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt 
-| 4B | mRNA-seq |  RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd |  curated/sexualreproductionlist.tsv, curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt  
-| 4E | mRNA-seq | RNA_seq_processing.sh  | NA | RNA_seq_CHD1.Rmd |  curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt, curated/nested_genes.csv, output/tab/pcg_sig_up.csv 
-| 4F | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt, curated/nested_genes.csv 
-| 5C | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_tailswaps.Rmd | meta/metadata_tailswap.xlsx 
-| 5D | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_tailswaps.Rmd | meta/metadata_tailswap.xlsx 
-| 7A | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh	| NA | curated/pcg.bed(*) 
-| 7B | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | ChIP_seq_CHD1.Rmd | curated/pcg.bed(*), output/tab/Quartile_hrp1_scaled.tab, output/tab/Quartile_hrp3_scaled.tab,output/tab/Quartile_H2Bub_scaled.tab 
-| 7C | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | Revision_code.Rmd |  output/tab/myc_scaled.tab, curated/pcg.bed(*)
-| 7D | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | Revision_code.Rmd | output/tab/totals_in_genes.tsv, output/tab/totals_genome.tsv curated/pcg.bed(*)
-| 7E | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh	| NA | curated/pcg.bed(*)
-| 7F | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | MNase_plotting.Rmd | output/anno/plusonenuc_filtered_WT.bed(*) 
-| 7G | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | meta/metadata_prf1.xlsx 
+| <div style="width:30px">Fig.</div> | <div style="width:100px">Data</div> | Processing | Intermediate | Analysis/Plot | Extra files for analysis |
+|--------|------------|-----------|--------------|--------------|-------------|
+| <div style="width:30px">1B</div> | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | MNase_plotting.Rmd | <sub>output/anno/plusonenuc_filtered_WT.bed(*)</sub> |
+| 1C | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | MNase_plotting.Rmd | <sub>output/anno/plusonenuc_filtered_WT.bed(*)</sub> |
+| 1D | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_remodelers.Rmd | <sub>meta/Figure_1.xlsx</sub> |
+| 2A | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | <sub>meta/Figure_2.xlsx</sub> |
+| 2B | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | <sub>meta/Figure_2.xlsx</sub> |
+| 2C | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd | <sub>curated/pcg.gtf</sub> |
+| 2D | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd | <sub>curated/pcg.gtf</sub> |
+| 3A | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd | <sub>output/anno/DE_antisense.gff</sub> |
+| 3B | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd | <sub>output/anno/DE_antisense.gff</sub> |
+| 3D | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | MNase_plotting.Rmd | <sub>output/anno/as_genes.bed(*)</sub> |
+| 3E | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | PRO_seq_CHD1.Rmd | <sub>output/anno/as_genes.bed(*)</sub> |
+| 3F | MNase-seq | MNase_seq_nfcore, PRO_seq_pipeline | MNase_computematrix.sh | PRO_seq_CHD1.Rmd | <sub>output/anno/as_genes.bed(*), output/anno/DE_antisense.gff</sub> |
+| 3G | NA | NA | NA | Revision_code.Rmd | <sub>output/tabs/TATA.tsv</sub> |
+| 4A | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | <sub>meta/Figure_2.xlsx, curated/sexualreproductionlist.tsv, curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt</sub> |
+| 4B | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | <sub>curated/sexualreproductionlist.tsv, curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt</sub> |
+| 4E | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | <sub>curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt, curated/nested_genes.csv, output/tab/pcg_sig_up.csv</sub> |
+| 4F | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | <sub>curated/earlymeiotic.txt, curated/middlemeiotic.txt, curated/latemeiotic.txt, curated/nested_genes.csv</sub> |
+| 5C | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_tailswaps.Rmd | <sub>meta/metadata_tailswap.xlsx</sub> |
+| 5D | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_tailswaps.Rmd | <sub>meta/metadata_tailswap.xlsx</sub> |
+| 7A | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | NA | <sub>curated/pcg.bed(*)</sub> |
+| 7B | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | ChIP_seq_CHD1.Rmd | <sub>curated/pcg.bed(*), output/tab/Quartile_hrp1_scaled.tab, output/tab/Quartile_hrp3_scaled.tab, output/tab/Quartile_H2Bub_scaled.tab</sub> |
+| 7C | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | Revision_code.Rmd | <sub>output/tab/myc_scaled.tab, curated/pcg.bed(*)</sub> |
+| 7D | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | Revision_code.Rmd | <sub>output/tab/totals_in_genes.tsv, output/tab/totals_genome.tsv, curated/pcg.bed(*)</sub> |
+| 7E | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | NA | <sub>curated/pcg.bed(*)</sub> |
+| 7F | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | MNase_plotting.Rmd | <sub>output/anno/plusonenuc_filtered_WT.bed(*)</sub> |
+| 7G | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | <sub>meta/metadata_prf1.xlsx</sub> |
 
 (*): File is needed in Intermediate step 
 
 ### Supplementary Figures: 
 
-| Figure | <div style="width:100px">Data</div>  | Processing       |	Intermediate | Analysis/Plot | Extra files used | 
-|--------|------------|------------------|---------------|---------------|-------------
-| S1 | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | NA | curated/pcg.bed(*) | 
-| S2B-S2F | RNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | meta/Figure_2.xlsx |
-| S3A | Iso-seq | Long_read | NA | supp_figure_pairs.R | NA | 
-| S3B | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd	| curated/pcg.gtf |
-| S3E | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh || output/tab/mnase_q1.tsv, output/tab/mnase_q2.tsv, output/tab/mnase_q3.tsv, output/tab/mnase_q4.tsv
-| S3F |  MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | Revision_code.Rmd | output/tab/mnase_q1.tsv, output/tab/mnase_q2.tsv, output/tab/mnase_q3.tsv, output/tab/mnase_q4.tsv
-| S3G | MNase-seq | MNase_seq_nfcore	|  MNase_computematrix.sh | MNase_plotting.Rmd | output/anno/as_genes.bed(*) | 
-| S4A | MNase-seq |MNase_seq_nfcore | MNase_computematrix.sh | NA|| 
+| Figure | <div style="width:100px">Data</div> | Processing | Intermediate | Analysis/Plot | Extra files used |
+|--------|------------|-----------|--------------|--------------|--------------|
+| S1 | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | NA | <sub>curated/pcg.bed(*)</sub> |
+| S2B–S2F | RNA-seq | RNA_seq_processing.sh | NA | RNA_seq_CHD1.Rmd | <sub>meta/Figure_2.xlsx</sub> |
+| S3A | Iso-seq | Long_read | NA | supp_figure_pairs.R | NA |
+| S3B | PRO-seq | PRO_seq_pipeline | NA | PRO_seq_CHD1.Rmd | <sub>curated/pcg.gtf</sub> |
+| S3E | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | NA | <sub>output/tab/mnase_q1.tsv, output/tab/mnase_q2.tsv, output/tab/mnase_q3.tsv, output/tab/mnase_q4.tsv</sub> |
+| S3F | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | Revision_code.Rmd | <sub>output/tab/mnase_q1.tsv, output/tab/mnase_q2.tsv, output/tab/mnase_q3.tsv, output/tab/mnase_q4.tsv</sub> |
+| S3G | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | MNase_plotting.Rmd | <sub>output/anno/as_genes.bed(*)</sub> |
+| S4A | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | NA |NA |
 | S4B | MNase-seq | MNase_seq_nfcore | NA | GC_analysis.Rmd | NA |
-| S4C | MNase-seq| MNase_seq_nfcore | MNase_computematrix.sh ||| 
-| S4E | Iso-seq | Long_read (main.nf)| NA | supp_figure_pairs.R | NA |
-| S5A | NA | NA | NA | Revision_code.Rmd | curated/genotype_antisense_upstream.fasta, curated/spombe_pcg_upstream.fasta , curated/random_500bp.fasta
-| S5C | NA | NA | NA | Revision_code.Rmd | curated/genotype_antisense_upstream.fasta, scurated/pombe_pcg_upstream.fasta 
-| S5D | NA | NA | NA | Revision_code.Rmd | output/tab/TATA_pcg.tsv 
-| S5F | NA | NA | NA | Revision_code.Rmd | output/tab/tomtom_test.csv
-| S6A | mRNA-seq | RNA_seq_processing.sh || RNA_seq_remodelers.Rmd | meta/Figure_1.xlsx | 
-| S6B | mRNA-seq | RNA_seq_processing.sh || RNA_seq_remodelers.Rmd | meta/Figure_1.xlsx, curated/sexualreproductionlist.txt |
-| S10A | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh |  ChIP_seq_CHD1.Rmd | curated/pcg.bed(*) | 
-| S10B | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh |  ChIP_seq_CHD1.Rmd | curated/pcg.bed(*) | 
-| S10D | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | Revision_code.Rmd | output/tab/Q1_gene_signal.tsv,output/tab/Q2_gene_signal.tsv, output/tab/Q3_gene_signal.tsv, output/tab/Q4_gene_signal.tsv  | 
-| S10E | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh |  ChIP_seq_CHD1.Rmd | curated/pcg.bed(*), output/tab/mean_tpm.txt |
-| S10F | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | meta/metadata_prf1.xlsx | 
-| S10G | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | meta/metadata_prf1.xlsx | 
-| S11 | Iso-seq, mRNA-seq| Long_read (review.nf) | sense_process.R  | supp_figure_sense.R | NA | 
+| S4C | MNase-seq | MNase_seq_nfcore | MNase_computematrix.sh | NA | NA |
+| S4E | Iso-seq | Long_read (main.nf) | NA | supp_figure_pairs.R | NA |
+| S5A | NA | NA | NA | Revision_code.Rmd | <sub>curated/genotype_antisense_upstream.fasta, curated/spombe_pcg_upstream.fasta, curated/random_500bp.fasta</sub> |
+| S5C | NA | NA | NA | Revision_code.Rmd | <sub>curated/genotype_antisense_upstream.fasta, scurated/pombe_pcg_upstream.fasta</sub> |
+| S5D | NA | NA | NA | Revision_code.Rmd | <sub>output/tab/TATA_pcg.tsv</sub> |
+| S5F | NA | NA | NA | Revision_code.Rmd | <sub>output/tab/tomtom_test.csv</sub> |
+| S6A | mRNA-seq | RNA_seq_processing.sh |  | RNA_seq_remodelers.Rmd | <sub>meta/Figure_1.xlsx</sub> |
+| S6B | mRNA-seq | RNA_seq_processing.sh |  | RNA_seq_remodelers.Rmd | <sub>meta/Figure_1.xlsx, curated/sexualreproductionlist.txt</sub> |
+| S10A | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | ChIP_seq_CHD1.Rmd | <sub>curated/pcg.bed(*)</sub> |
+| S10B | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | ChIP_seq_CHD1.Rmd | <sub>curated/pcg.bed(*)</sub> |
+| S10D | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | Revision_code.Rmd | <sub>output/tab/Q1_gene_signal.tsv, output/tab/Q2_gene_signal.tsv, output/tab/Q3_gene_signal.tsv, output/tab/Q4_gene_signal.tsv</sub> |
+| S10E | ChIP-seq | ChIP_seq_nfcore | ChIP_seq_computematrix.sh | ChIP_seq_CHD1.Rmd | <sub>curated/pcg.bed(*), output/tab/mean_tpm.txt</sub> |
+| S10F | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | <sub>meta/metadata_prf1.xlsx</sub> |
+| S10G | mRNA-seq | RNA_seq_processing.sh | NA | RNA_seq_prf1.Rmd | <sub>meta/metadata_prf1.xlsx</sub> |
+| S11 | Iso-seq, mRNA-seq | Long_read (review.nf) | sense_process.R | supp_figure_sense.R | NA |
 
-(*): File is needed in Intermediate step 
+(*): File is needed in Intermediate step
